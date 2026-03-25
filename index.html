@@ -1,910 +1,253 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CWS Solids Hopper Dashboard</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Inter', -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 24px; }
- 
-  .header { text-align: center; margin-bottom: 24px; padding: 28px 24px; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #334155; border-radius: 16px; position: relative; overflow: hidden; }
-  .header::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #3b82f6, #06b6d4, #10b981); }
-  .header h1 { font-size: 26px; font-weight: 800; background: linear-gradient(135deg, #60a5fa, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px; }
-  .header .subtitle { color: #94a3b8; font-size: 14px; margin-top: 6px; }
-  .header-row { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 12px; flex-wrap: wrap; }
-  .live-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 14px; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); border-radius: 20px; font-size: 12px; font-weight: 600; color: #34d399; }
-  .live-badge .dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; animation: pulse 2s ease-in-out infinite; }
-  @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(0.8); } }
- 
-  .share-btn, .export-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid; transition: all 0.2s; }
-  .share-btn { background: rgba(59,130,246,0.1); border-color: rgba(59,130,246,0.3); color: #60a5fa; }
-  .share-btn:hover { background: rgba(59,130,246,0.2); }
-  .export-btn { background: rgba(139,92,246,0.1); border-color: rgba(139,92,246,0.3); color: #a78bfa; }
-  .export-btn:hover { background: rgba(139,92,246,0.2); }
- 
-  .facility-tabs { display: flex; justify-content: center; gap: 12px; margin-bottom: 24px; }
-  .tab { padding: 10px 28px; border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.3s; border: 1px solid #334155; background: #1e293b; color: #94a3b8; }
-  .tab.active-dm { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; border-color: #3b82f6; box-shadow: 0 4px 15px rgba(59,130,246,0.3); }
-  .tab.active-rc { background: linear-gradient(135deg, #06b6d4, #0891b2); color: white; border-color: #06b6d4; box-shadow: 0 4px 15px rgba(6,182,212,0.3); }
-  .tab:hover:not(.active-dm):not(.active-rc) { background: #334155; color: #e2e8f0; }
- 
-  .status-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 24px; }
-  .status-card { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 18px; position: relative; overflow: hidden; }
-  .status-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
-  .status-card.hopper1::before { background: #3b82f6; }
-  .status-card.hopper2::before { background: #8b5cf6; }
-  .status-card.feed-tank::before { background: #06b6d4; }
-  .status-card.flow-rate::before { background: #f59e0b; }
-  .status-card.loads-out::before { background: #ef4444; }
-  .status-card .label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 6px; }
-  .status-card .value { font-size: 24px; font-weight: 800; letter-spacing: -1px; }
-  .status-card .unit { font-size: 12px; font-weight: 400; color: #94a3b8; margin-left: 3px; }
-  .status-card.hopper1 .value { color: #60a5fa; }
-  .status-card.hopper2 .value { color: #a78bfa; }
-  .status-card.feed-tank .value { color: #22d3ee; }
-  .status-card.flow-rate .value { color: #fbbf24; }
-  .status-card.loads-out .value { color: #f87171; }
-  .status-card .subtext { font-size: 10px; color: #64748b; margin-top: 3px; }
-  .status-card .cap-bar { height: 4px; background: #0f172a; border-radius: 2px; margin-top: 8px; overflow: hidden; }
-  .status-card .cap-fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
- 
-  .panel { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 24px; margin-bottom: 20px; }
-  .panel.full-grid { grid-column: 1 / -1; }
-  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-  .chart-title { font-size: 15px; font-weight: 700; margin-bottom: 16px; color: #e2e8f0; }
-  .chart-title .accent { font-weight: 400; color: #64748b; font-size: 12px; margin-left: 8px; }
-  canvas { width: 100% !important; }
- 
-  .hopper-gauges { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-  .gauge-panel { text-align: center; }
-  .gauge-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 16px; }
-  .hopper-visual { display: flex; justify-content: center; gap: 40px; align-items: flex-end; margin-bottom: 16px; }
-  .hopper-container { display: flex; flex-direction: column; align-items: center; }
-  .hopper-label { font-size: 11px; font-weight: 600; color: #94a3b8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .hopper-bar-wrapper { width: 80px; height: 160px; background: #0f172a; border-radius: 8px; border: 2px solid #334155; position: relative; overflow: hidden; }
-  .hopper-bar-fill { position: absolute; bottom: 0; left: 0; right: 0; border-radius: 0 0 6px 6px; transition: height 0.8s ease; }
-  .hopper-bar-fill.h1 { background: linear-gradient(180deg, #60a5fa, #3b82f6); }
-  .hopper-bar-fill.h2 { background: linear-gradient(180deg, #a78bfa, #7c3aed); }
-  .hopper-bar-pct { font-size: 22px; font-weight: 800; margin-top: 8px; }
-  .hopper-bar-pct.h1 { color: #60a5fa; }
-  .hopper-bar-pct.h2 { color: #a78bfa; }
-  .hopper-bar-lbs { font-size: 11px; color: #64748b; margin-top: 2px; }
-  .hopper-bar-max { font-size: 9px; color: #475569; margin-top: 1px; }
- 
-  /* Load-Out Section */
-  .loadout-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-  .loadout-form-panel { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 24px; }
-  .loadout-form-panel h3 { font-size: 15px; font-weight: 700; margin-bottom: 4px; color: #e2e8f0; }
-  .loadout-form-panel .form-desc { font-size: 12px; color: #64748b; margin-bottom: 16px; }
- 
-  /* Ticket Scanner */
-  .scan-zone { border: 2px dashed #334155; border-radius: 12px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.3s; margin-bottom: 16px; position: relative; }
-  .scan-zone:hover, .scan-zone.drag-over { border-color: #f59e0b; background: rgba(245,158,11,0.05); }
-  .scan-zone .scan-icon { font-size: 32px; margin-bottom: 6px; }
-  .scan-zone .scan-text { font-size: 13px; color: #94a3b8; }
-  .scan-zone .scan-sub { font-size: 11px; color: #475569; margin-top: 4px; }
-  .scan-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-  .scan-preview { display: none; margin-bottom: 12px; }
-  .scan-preview img { max-width: 100%; max-height: 150px; border-radius: 8px; border: 1px solid #334155; }
-  .scan-preview .scan-status { font-size: 12px; margin-top: 8px; padding: 8px 12px; border-radius: 8px; }
-  .scan-preview .scanning { color: #fbbf24; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.2); }
-  .scan-preview .scan-done { color: #34d399; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.2); }
-  .scan-preview .scan-fail { color: #f87171; background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.2); }
- 
-  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-  .form-group { display: flex; flex-direction: column; gap: 4px; }
-  .form-group label { font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
-  .form-group input, .form-group select { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px 12px; color: #e2e8f0; font-size: 13px; font-family: inherit; transition: border-color 0.2s; }
-  .form-group input:focus, .form-group select:focus { outline: none; border-color: #3b82f6; }
-  .form-group select option { background: #1e293b; }
-  .form-group .autofill-hint { font-size: 10px; color: #f59e0b; font-style: italic; }
- 
-  .add-load-btn { width: 100%; padding: 12px; border-radius: 10px; border: none; background: linear-gradient(135deg, #f59e0b, #d97706); color: #0f172a; font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; font-family: inherit; margin-top: 4px; }
-  .add-load-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(245,158,11,0.3); }
- 
-  .loadout-log { max-height: 340px; overflow-y: auto; }
-  .loadout-log table { width: 100%; font-size: 12px; }
-  .loadout-log th { text-align: left; padding: 8px 10px; font-weight: 600; color: #94a3b8; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #334155; position: sticky; top: 0; background: #1e293b; }
-  .loadout-log td { padding: 8px 10px; border-bottom: 1px solid rgba(51,65,85,0.3); color: #cbd5e1; }
-  .delete-btn { background: none; border: none; color: #f87171; cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 4px; transition: background 0.2s; }
-  .delete-btn:hover { background: rgba(248,113,113,0.15); }
-  .empty-log { text-align: center; padding: 30px; color: #475569; font-size: 13px; }
- 
-  .data-table-panel { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 24px; margin-bottom: 20px; overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; padding: 10px 12px; font-weight: 600; color: #94a3b8; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #334155; }
-  td { padding: 10px 12px; border-bottom: 1px solid rgba(30,41,59,0.5); color: #cbd5e1; }
-  tr:nth-child(even) td { background: rgba(15,23,42,0.3); }
-  tr:hover td { background: rgba(51,65,85,0.3); }
-  .feeding { color: #34d399; font-weight: 600; }
-  .not-feeding { color: #f87171; font-weight: 600; }
-  .positive { color: #34d399; }
-  .negative { color: #f87171; }
-  .load-marker { color: #fbbf24; font-weight: 600; }
- 
-  .footer { text-align: center; padding: 16px; font-size: 11px; color: #475569; }
- 
-  .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center; }
-  .modal-overlay.visible { display: flex; }
-  .modal { background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 32px; max-width: 500px; width: 90%; }
-  .modal h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; color: #e2e8f0; }
-  .modal p { font-size: 13px; color: #94a3b8; margin-bottom: 20px; }
-  .modal-option { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 16px; margin-bottom: 12px; cursor: pointer; transition: all 0.2s; }
-  .modal-option:hover { border-color: #3b82f6; background: rgba(59,130,246,0.05); }
-  .modal-option h4 { font-size: 14px; font-weight: 600; color: #e2e8f0; margin-bottom: 4px; }
-  .modal-option p { font-size: 12px; color: #64748b; margin-bottom: 0; }
-  .modal-close { display: block; width: 100%; padding: 10px; margin-top: 8px; border-radius: 8px; border: 1px solid #334155; background: transparent; color: #94a3b8; font-size: 13px; cursor: pointer; font-family: inherit; }
-  .modal-close:hover { background: #334155; }
-  .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px); background: #10b981; color: white; padding: 12px 24px; border-radius: 10px; font-size: 13px; font-weight: 600; z-index: 2000; transition: transform 0.3s; pointer-events: none; }
-  .toast.show { transform: translateX(-50%) translateY(0); }
- 
-  @media (max-width: 1100px) { .status-cards { grid-template-columns: repeat(3, 1fr); } }
-  @media (max-width: 900px) { .status-cards { grid-template-columns: repeat(2, 1fr); } .charts-grid, .hopper-gauges, .loadout-section { grid-template-columns: 1fr; } }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CWS Solids Hopper Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+    header { background: #1e293b; padding: 16px 24px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #334155; }
+    header h1 { font-size: 1.4rem; font-weight: 700; color: #f1f5f9; }
+    header .subtitle { font-size: 0.85rem; color: #94a3b8; margin-top: 2px; }
+    .badge { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 4px 10px; font-size: 0.75rem; color: #64748b; }
+    .badge span { color: #38bdf8; font-weight: 600; }
+    main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: #1e293b; border-radius: 12px; border: 1px solid #334155; overflow: hidden; }
+    .card-header { padding: 16px 20px; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; }
+    .card-header h2 { font-size: 1.1rem; font-weight: 700; }
+    .card-body { padding: 20px; }
+    .facility-dm .card-header { background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%); }
+    .facility-rc .card-header { background: linear-gradient(135deg, #2d1e5f 0%, #1e293b 100%); }
+    .hopper-row { display: flex; gap: 12px; margin-bottom: 16px; }
+    .hopper-item { flex: 1; background: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; }
+    .hopper-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 4px; }
+    .hopper-value { font-size: 1.4rem; font-weight: 700; }
+    .hopper-pct { font-size: 0.75rem; color: #94a3b8; margin-top: 2px; }
+    .bar-container { height: 8px; background: #0f172a; border-radius: 4px; margin-top: 6px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+    .bar-h1 { background: #38bdf8; }
+    .bar-h2 { background: #818cf8; }
+    .status-row { display: flex; gap: 12px; margin-bottom: 16px; }
+    .status-item { flex: 1; background: #0f172a; border-radius: 8px; padding: 10px 12px; border: 1px solid #334155; }
+    .status-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 4px; }
+    .status-value { font-size: 0.95rem; font-weight: 600; }
+    .feeding-on { color: #4ade80; }
+    .feeding-off { color: #f87171; }
+    .chart-container { background: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155; height: 180px; position: relative; }
+    .chart-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 8px; }
+    canvas { width: 100% !important; }
+    .last-updated { text-align: center; color: #475569; font-size: 0.75rem; margin-top: 8px; }
+  </style>
 </head>
 <body>
- 
-<div class="header">
-  <h1>CWS Solids Hopper Dashboard</h1>
-  <div class="subtitle">Clean Water Services &mdash; Durham &amp; Rock Creek Facilities</div>
-  <div class="header-row">
-    <div class="live-badge"><span class="dot"></span> <span id="latest-badge">Loading...</span></div>
-    <div class="share-btn" onclick="openShareModal()">
-      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
-      Share
-    </div>
-    <div class="export-btn" onclick="exportCSV()">
-      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-      Export CSV
-    </div>
+<header>
+  <div>
+    <h1>🏭 CWS Solids Hopper Dashboard</h1>
+    <div class="subtitle">Clean Water Services — Real-time Solids Monitoring</div>
   </div>
-</div>
- 
-<div class="facility-tabs">
-  <div class="tab active-dm" id="tab-dm" onclick="switchFacility('DM')">Durham (DM)</div>
-  <div class="tab" id="tab-rc" onclick="switchFacility('RC')">Rock Creek (RC)</div>
-</div>
- 
-<div class="status-cards" id="status-cards"></div>
-<div class="hopper-gauges" id="hopper-gauges"></div>
- 
-<!-- Load-Out Section -->
-<div class="loadout-section">
-  <div class="loadout-form-panel">
-    <h3>Log a Load-Out</h3>
-    <div class="form-desc">Upload a ticket photo or enter manually. Adjusts calculated flow rates automatically.</div>
- 
-    <!-- Ticket Scanner -->
-    <div class="scan-zone" id="scan-zone">
-      <input type="file" id="ticket-file" accept="image/*" onchange="handleTicketUpload(event)">
-      <div class="scan-icon">&#128247;</div>
-      <div class="scan-text">Drop a ticket photo here or tap to upload</div>
-      <div class="scan-sub">Supports JPG, PNG &mdash; we'll scan it for weight, hopper &amp; truck info</div>
-    </div>
-    <div class="scan-preview" id="scan-preview">
-      <img id="scan-img" src="" alt="Ticket preview">
-      <div class="scan-status" id="scan-status"></div>
-    </div>
- 
-    <div class="form-row">
-      <div class="form-group">
-        <label>Date &amp; Time</label>
-        <input type="datetime-local" id="loadout-time">
+  <div class="badge">Last updated: <span id="lastUpdatedHeader">—</span></div>
+</header>
+
+<main>
+  <div class="grid">
+    <div class="card facility-dm" id="card-dm">
+      <div class="card-header">
+        <h2>🏗️ Durham (DM)</h2>
+        <div id="dm-feeding-badge" style="font-size:0.8rem;padding:3px 10px;border-radius:999px;border:1px solid #334155;">—</div>
       </div>
-      <div class="form-group">
-        <label>Facility</label>
-        <select id="loadout-facility">
-          <option value="DM">Durham (DM)</option>
-          <option value="RC">Rock Creek (RC)</option>
-        </select>
+      <div class="card-body">
+        <div class="hopper-row">
+          <div class="hopper-item">
+            <div class="hopper-label">Hopper 1</div>
+            <div class="hopper-value" id="dm-h1-val">—</div>
+            <div class="hopper-pct" id="dm-h1-pct">—</div>
+            <div class="bar-container"><div class="bar-fill bar-h1" id="dm-h1-bar" style="width:0%"></div></div>
+          </div>
+          <div class="hopper-item">
+            <div class="hopper-label">Hopper 2</div>
+            <div class="hopper-value" id="dm-h2-val">—</div>
+            <div class="hopper-pct" id="dm-h2-pct">—</div>
+            <div class="bar-container"><div class="bar-fill bar-h2" id="dm-h2-bar" style="width:0%"></div></div>
+          </div>
+        </div>
+        <div class="status-row">
+          <div class="status-item">
+            <div class="status-label">Feed Tank</div>
+            <div class="status-value" id="dm-feedtank">—</div>
+          </div>
+          <div class="status-item">
+            <div class="status-label">Hours Until Full</div>
+            <div class="status-value" id="dm-hours-full">—</div>
+          </div>
+        </div>
+        <div class="chart-container">
+          <div class="chart-title">Hopper Weights — 24hr</div>
+          <canvas id="chart-dm" height="140"></canvas>
+        </div>
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Hopper</label>
-        <select id="loadout-hopper">
-          <option value="1">Hopper 1</option>
-          <option value="2">Hopper 2</option>
-        </select>
+
+    <div class="card facility-rc" id="card-rc">
+      <div class="card-header">
+        <h2>🌊 Rock Creek (RC)</h2>
+        <div id="rc-feeding-badge" style="font-size:0.8rem;padding:3px 10px;border-radius:999px;border:1px solid #334155;">—</div>
       </div>
-      <div class="form-group">
-        <label>Weight Removed (LBS)</label>
-        <input type="number" id="loadout-weight" placeholder="e.g. 45000" min="0" step="100">
-        <span class="autofill-hint" id="weight-hint" style="display:none"></span>
+      <div class="card-body">
+        <div class="hopper-row">
+          <div class="hopper-item">
+            <div class="hopper-label">Hopper 1</div>
+            <div class="hopper-value" id="rc-h1-val">—</div>
+            <div class="hopper-pct" id="rc-h1-pct">—</div>
+            <div class="bar-container"><div class="bar-fill bar-h1" id="rc-h1-bar" style="width:0%"></div></div>
+          </div>
+          <div class="hopper-item">
+            <div class="hopper-label">Hopper 2</div>
+            <div class="hopper-value" id="rc-h2-val">—</div>
+            <div class="hopper-pct" id="rc-h2-pct">—</div>
+            <div class="bar-container"><div class="bar-fill bar-h2" id="rc-h2-bar" style="width:0%"></div></div>
+          </div>
+        </div>
+        <div class="status-row">
+          <div class="status-item">
+            <div class="status-label">Feed Tank</div>
+            <div class="status-value" id="rc-feedtank">—</div>
+          </div>
+          <div class="status-item">
+            <div class="status-label">Hours Until Full</div>
+            <div class="status-value" id="rc-hours-full">—</div>
+          </div>
+        </div>
+        <div class="chart-container">
+          <div class="chart-title">Hopper Weights — 24hr</div>
+          <canvas id="chart-rc" height="140"></canvas>
+        </div>
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Truck / Driver (optional)</label>
-        <input type="text" id="loadout-truck" placeholder="e.g. Truck #42">
-      </div>
-      <div class="form-group">
-        <label>Notes (optional)</label>
-        <input type="text" id="loadout-notes" placeholder="e.g. Wet material">
-      </div>
-    </div>
-    <button class="add-load-btn" onclick="addLoadOut()">+ Add Load-Out</button>
   </div>
-  <div class="loadout-form-panel">
-    <h3>Load-Out Log</h3>
-    <div class="form-desc">All recorded removals. These are factored into calculated flow rates.</div>
-    <div class="loadout-log" id="loadout-log"></div>
-  </div>
-</div>
- 
-<!-- Charts -->
-<div class="charts-grid">
-  <div class="panel full-grid">
-    <div class="chart-title">Hopper Levels Over Time <span class="accent">(LBS) &mdash; dashed lines show max capacity</span></div>
-    <canvas id="hopperChart" height="85"></canvas>
-  </div>
-</div>
-<div class="charts-grid">
-  <div class="panel">
-    <div class="chart-title">Calculated Net Flow Rate <span class="accent">(lbs/hr, adjusted for load-outs)</span></div>
-    <canvas id="flowRateChart" height="110"></canvas>
-  </div>
-  <div class="panel">
-    <div class="chart-title">Feed Tank Level <span class="accent">(Ft)</span></div>
-    <canvas id="feedTankChart" height="110"></canvas>
-  </div>
-</div>
- 
-<!-- Detailed Table -->
-<div class="data-table-panel">
-  <div class="chart-title">Detailed Readings <span class="accent">With calculated flow rates &amp; load-out adjustments</span></div>
-  <table>
-    <thead>
-      <tr>
-        <th>Time (PT)</th>
-        <th>H1 (LBS)</th>
-        <th>H2 (LBS)</th>
-        <th>Total</th>
-        <th>Delta</th>
-        <th>Load-Outs</th>
-        <th>Calc. Flow Rate</th>
-        <th>Feed Tank</th>
-        <th>Centrifuge</th>
-      </tr>
-    </thead>
-    <tbody id="table-body"></tbody>
-  </table>
-</div>
- 
-<div class="footer">Data sourced from CWS Solids automated reports (svcSolids@cleanwaterservices.org) &mdash; Generated Mar 25, 2026</div>
- 
-<!-- Share Modal -->
-<div class="modal-overlay" id="share-modal">
-  <div class="modal">
-    <h2>Share This Dashboard</h2>
-    <p>Choose how to share with your coworkers:</p>
-    <div class="modal-option" onclick="copyLink()"><h4>Copy Link to File</h4><p>Share the HTML file directly &mdash; anyone can open it in a browser.</p></div>
-    <div class="modal-option" onclick="emailDashboard()"><h4>Copy Snapshot for Email / Slack</h4><p>Copies a text summary of current readings to clipboard.</p></div>
-    <div class="modal-option" onclick="downloadFile()"><h4>Download Dashboard File</h4><p>Save the complete interactive dashboard as HTML to send to anyone.</p></div>
-    <button class="modal-close" onclick="closeShareModal()">Close</button>
-  </div>
-</div>
- 
-<div class="toast" id="toast"></div>
- 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js"></script>
+  <div class="last-updated" id="lastUpdatedFooter">Data refreshes automatically every 2 hours</div>
+</main>
+
 <script>
-// ═══════════════════════════════════════════
-// HOPPER CAPACITIES (real maximums)
-// ═══════════════════════════════════════════
-const HOPPER_MAX = {
-  DM: { h1: 129000, h2: 130000 },
-  RC: { h1: 105000, h2: 109000 }
-};
- 
-// ═══════════════════════════════════════════
-// RAW DATA from Gmail emails
-// ═══════════════════════════════════════════
 const rawData = {
-        DM: [
-          { time: "3/24 9:00 PM", ts: new Date(2026,2,24,21,0), h1: 70687, h2: 87937, feeding: true, feedTank: 9.8 },
-          { time: "3/24 11:00 PM", ts: new Date(2026,2,24,23,0), h1: 70593, h2: 100968, feeding: true, feedTank: 9.3 },
-          { time: "3/25 1:00 AM", ts: new Date(2026,2,25,1,0), h1: 70687, h2: 113906, feeding: true, feedTank: 8.9 },
-          { time: "3/25 3:00 AM", ts: new Date(2026,2,25,3,0), h1: 70687, h2: 126656, feeding: true, feedTank: 8.8 },
-          { time: "3/25 5:00 AM", ts: new Date(2026,2,25,5,0), h1: 79031, h2: 130968, feeding: true, feedTank: 8.6 },
-          { time: "3/25 7:00 AM", ts: new Date(2026,2,25,7,0), h1: 91593, h2: 131062, feeding: true, feedTank: 7.9 },
-          { time: "3/25 9:00 AM", ts: new Date(2026,2,25,9,0), h1: 102093, h2: 130781, feeding: false, feedTank: 8.5 },
-          { time: "3/25 11:00 AM", ts: new Date(2026,2,25,11,0), h1: 102937, h2: 130875, feeding: false, feedTank: 9.1 },
-          { time: "3/25 1:00 PM", ts: new Date(2026,2,25,13,0), h1: 102843, h2: 130687, feeding: false, feedTank: 10.0 },
-          { time: "3/25 3:00 PM", ts: new Date(2026,2,25,15,0), h1: 102656, h2: 130593, feeding: false, feedTank: 10.5 }
-        ],
-        RC: [
-          { time: "3/24 9:00 PM", ts: new Date(2026,2,24,21,0), h1: 21580, h2: 110260, feeding: true, feedTank: 8.8 },
-          { time: "3/24 11:00 PM", ts: new Date(2026,2,24,23,0), h1: 38430, h2: 109720, feeding: true, feedTank: 8.8 },
-          { time: "3/25 1:00 AM", ts: new Date(2026,2,25,1,0), h1: 55510, h2: 109340, feeding: true, feedTank: 8.7 },
-          { time: "3/25 3:00 AM", ts: new Date(2026,2,25,3,0), h1: 72280, h2: 109270, feeding: true, feedTank: 8.6 },
-          { time: "3/25 5:00 AM", ts: new Date(2026,2,25,5,0), h1: 63900, h2: 74190, feeding: true, feedTank: 8.6 },
-          { time: "3/25 7:00 AM", ts: new Date(2026,2,25,7,0), h1: 78230, h2: 73890, feeding: false, feedTank: 8.7 },
-          { time: "3/25 9:00 AM", ts: new Date(2026,2,25,9,0), h1: 60470, h2: 73660, feeding: false, feedTank: 9.5 },
-          { time: "3/25 11:00 AM", ts: new Date(2026,2,25,11,0), h1: 17690, h2: 73660, feeding: false, feedTank: 10.9 },
-          { time: "3/25 1:00 PM", ts: new Date(2026,2,25,13,0), h1: 17920, h2: 73810, feeding: false, feedTank: 11.5 },
-          { time: "3/25 3:00 PM", ts: new Date(2026,2,25,15,0), h1: 17920, h2: 73810, feeding: false, feedTank: 12.1 }
-        ]
-      };
- 
-// ═══════════════════════════════════════════
-// LOAD-OUT TRACKING (Google Sheets backed)
-// ═══════════════════════════════════════════
-const SHEETS_API = 'https://script.google.com/macros/s/AKfycbwVT_viLdxJAC2LxAZ2cEysPDhgethiYTyIYcfA0ua8CzNs9EqNNuRClKTbVnaiY2-5rw/exec';
-let loadOuts = [];
-let loadOutId = 0;
- 
-// Load existing load-outs from Google Sheets on startup
-async function loadFromSheets() {
-  try {
-    const resp = await fetch(SHEETS_API);
-    const json = await resp.json();
-    if (json.status === 'ok' && json.data) {
-      loadOuts = json.data.map(r => ({
-        id: r.ID || (++loadOutId + ''),
-        sheetId: r.ID,
-        time: new Date(r.Timestamp),
-        facility: r.Facility,
-        hopper: parseInt(r.Hopper) || 1,
-        weight: parseFloat(r.Weight_LBS) || 0,
-        notes: [r.Truck, r.Notes].filter(Boolean).join(' — ')
-      }));
-      loadOutId = loadOuts.length;
-      showToast(`Loaded ${loadOuts.length} load-outs from Google Sheets`);
-      renderAll();
-    }
-  } catch (e) {
-    console.warn('Sheets load failed, using local only:', e);
-  }
+  DM: [
+    { time: "3/24 9:00 PM",  ts: new Date(2026,2,24,21,0),  h1: 70687,  h2: 87937,  feeding: true,  feedTank: 9.8  },
+    { time: "3/24 11:00 PM", ts: new Date(2026,2,24,23,0),  h1: 70593,  h2: 100968, feeding: true,  feedTank: 9.3  },
+    { time: "3/25 1:00 AM",  ts: new Date(2026,2,25,1,0),   h1: 70687,  h2: 113906, feeding: true,  feedTank: 8.9  },
+    { time: "3/25 3:00 AM",  ts: new Date(2026,2,25,3,0),   h1: 70687,  h2: 126656, feeding: true,  feedTank: 8.8  },
+    { time: "3/25 5:00 AM",  ts: new Date(2026,2,25,5,0),   h1: 79031,  h2: 130968, feeding: true,  feedTank: 8.6  },
+    { time: "3/25 7:00 AM",  ts: new Date(2026,2,25,7,0),   h1: 91593,  h2: 131062, feeding: true,  feedTank: 7.9  },
+    { time: "3/25 9:00 AM",  ts: new Date(2026,2,25,9,0),   h1: 102093, h2: 130781, feeding: false, feedTank: 8.5  },
+    { time: "3/25 11:00 AM", ts: new Date(2026,2,25,11,0),  h1: 102937, h2: 130875, feeding: false, feedTank: 9.1  },
+    { time: "3/25 1:00 PM",  ts: new Date(2026,2,25,13,0),  h1: 102843, h2: 130687, feeding: false, feedTank: 10.0 },
+    { time: "3/25 3:00 PM",  ts: new Date(2026,2,25,15,0),  h1: 102656, h2: 130593, feeding: false, feedTank: 10.5 }
+  ],
+  RC: [
+    { time: "3/24 9:00 PM",  ts: new Date(2026,2,24,21,0),  h1: 21580,  h2: 110260, feeding: true,  feedTank: 8.8  },
+    { time: "3/24 11:00 PM", ts: new Date(2026,2,24,23,0),  h1: 38430,  h2: 109720, feeding: true,  feedTank: 8.8  },
+    { time: "3/25 1:00 AM",  ts: new Date(2026,2,25,1,0),   h1: 55510,  h2: 109340, feeding: true,  feedTank: 8.7  },
+    { time: "3/25 3:00 AM",  ts: new Date(2026,2,25,3,0),   h1: 72280,  h2: 109270, feeding: true,  feedTank: 8.6  },
+    { time: "3/25 5:00 AM",  ts: new Date(2026,2,25,5,0),   h1: 63900,  h2: 74190,  feeding: true,  feedTank: 8.6  },
+    { time: "3/25 7:00 AM",  ts: new Date(2026,2,25,7,0),   h1: 78230,  h2: 73890,  feeding: false, feedTank: 8.7  },
+    { time: "3/25 9:00 AM",  ts: new Date(2026,2,25,9,0),   h1: 60470,  h2: 73660,  feeding: false, feedTank: 9.5  },
+    { time: "3/25 11:00 AM", ts: new Date(2026,2,25,11,0),  h1: 17690,  h2: 73660,  feeding: false, feedTank: 10.9 },
+    { time: "3/25 1:00 PM",  ts: new Date(2026,2,25,13,0),  h1: 17920,  h2: 73810,  feeding: false, feedTank: 11.5 },
+    { time: "3/25 3:00 PM",  ts: new Date(2026,2,25,15,0),  h1: 17920,  h2: 73810,  feeding: false, feedTank: 12.1 }
+  ]
+};
+
+const CAPACITY = {
+  DM: { h1: 128000, h2: 131000 },
+  RC: { h1: 116000, h2: 110000 }
+};
+
+function fmt(n) { return n.toLocaleString() + ' LBS'; }
+function pct(val, cap) { return Math.min(100, Math.round(val / cap * 100)); }
+
+function hoursUntilFull(data, facility) {
+  const entries = data[facility];
+  if (entries.length < 2) return null;
+  const latest = entries[entries.length - 1];
+  const prev   = entries[entries.length - 2];
+  const dtMs   = latest.ts - prev.ts;
+  if (dtMs <= 0) return null;
+  const dtHrs  = dtMs / 3600000;
+  const cap    = CAPACITY[facility];
+  if (latest.feeding) return null;
+  const dh1 = latest.h1 - prev.h1;
+  const dh2 = latest.h2 - prev.h2;
+  const results = [];
+  if (dh1 > 0) { const r = cap.h1 - latest.h1; if (r > 0) results.push(r / (dh1 / dtHrs)); }
+  if (dh2 > 0) { const r = cap.h2 - latest.h2; if (r > 0) results.push(r / (dh2 / dtHrs)); }
+  if (results.length === 0) return null;
+  return Math.min(...results);
 }
- 
-async function addLoadOut() {
-  const timeInput = document.getElementById('loadout-time').value;
-  const facility = document.getElementById('loadout-facility').value;
-  const hopper = document.getElementById('loadout-hopper').value;
-  const weight = parseFloat(document.getElementById('loadout-weight').value);
-  const truck = document.getElementById('loadout-truck').value;
-  const notes = document.getElementById('loadout-notes').value;
- 
-  if (!timeInput || !weight || weight <= 0) {
-    showToast('Please enter a valid time and weight');
-    return;
+
+function updateFacility(fac) {
+  const entries = rawData[fac];
+  if (!entries || entries.length === 0) return;
+  const latest = entries[entries.length - 1];
+  const cap = CAPACITY[fac];
+  const p = fac.toLowerCase();
+  document.getElementById(p+'-h1-val').textContent = fmt(latest.h1);
+  document.getElementById(p+'-h1-pct').textContent = pct(latest.h1, cap.h1) + '% full';
+  document.getElementById(p+'-h1-bar').style.width = pct(latest.h1, cap.h1) + '%';
+  document.getElementById(p+'-h2-val').textContent = fmt(latest.h2);
+  document.getElementById(p+'-h2-pct').textContent = pct(latest.h2, cap.h2) + '% full';
+  document.getElementById(p+'-h2-bar').style.width = pct(latest.h2, cap.h2) + '%';
+  document.getElementById(p+'-feedtank').textContent = latest.feedTank + ' Ft';
+  const hrs = hoursUntilFull(rawData, fac);
+  const hrsEl = document.getElementById(p+'-hours-full');
+  if (hrs !== null) {
+    hrsEl.textContent = hrs.toFixed(1) + ' hrs';
+    hrsEl.style.color = hrs < 4 ? '#f87171' : hrs < 8 ? '#fbbf24' : '#4ade80';
+  } else {
+    hrsEl.textContent = latest.feeding ? 'Draining' : '—';
+    hrsEl.style.color = '#94a3b8';
   }
- 
-  const combined = [truck, notes].filter(Boolean).join(' — ');
-  const localId = ++loadOutId;
-  loadOuts.push({ id: localId, time: new Date(timeInput), facility, hopper: parseInt(hopper), weight, notes: combined });
- 
-  document.getElementById('loadout-weight').value = '';
-  document.getElementById('loadout-truck').value = '';
-  document.getElementById('loadout-notes').value = '';
-  document.getElementById('weight-hint').style.display = 'none';
-  document.getElementById('scan-preview').style.display = 'none';
-  document.getElementById('scan-zone').style.display = '';
- 
-  showToast(`Load-out of ${weight.toLocaleString()} LBS recorded`);
-  renderAll();
- 
-  // Persist to Google Sheets in background
-  try {
-    const resp = await fetch(SHEETS_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action: 'add',
-        timestamp: new Date(timeInput).toISOString(),
-        facility: facility,
-        hopper: hopper,
-        weight: weight,
-        truck: truck || '',
-        notes: notes || ''
-      })
-    });
-    const json = await resp.json();
-    if (json.status === 'ok' && json.id) {
-      const entry = loadOuts.find(l => l.id === localId);
-      if (entry) entry.sheetId = json.id;
-      showToast('Saved to Google Sheets ✓');
-    }
-  } catch (e) {
-    console.warn('Sheets save failed:', e);
-    showToast('Saved locally (Sheets sync failed)');
+  const badge = document.getElementById(p+'-feeding-badge');
+  if (latest.feeding) {
+    badge.textContent = '⚡ Feeding'; badge.style.background='#14532d'; badge.style.color='#4ade80'; badge.style.borderColor='#166534';
+  } else {
+    badge.textContent = '⏸ Not Feeding'; badge.style.background='#450a0a'; badge.style.color='#f87171'; badge.style.borderColor='#7f1d1d';
   }
+  document.getElementById('lastUpdatedHeader').textContent = latest.time;
+  document.getElementById('lastUpdatedFooter').textContent = 'Last updated: ' + latest.time + ' PT';
 }
- 
-async function removeLoadOut(id) {
-  const entry = loadOuts.find(l => l.id === id);
-  loadOuts = loadOuts.filter(l => l.id !== id);
-  renderAll();
- 
-  // Delete from Google Sheets if it has a sheet ID
-  if (entry && entry.sheetId) {
-    try {
-      await fetch(SHEETS_API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'delete', id: entry.sheetId })
-      });
-    } catch (e) {
-      console.warn('Sheets delete failed:', e);
-    }
-  }
+
+function drawChart(canvasId, entries, cap) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth || 400, H = canvas.offsetHeight || 140;
+  canvas.width = W; canvas.height = H;
+  ctx.clearRect(0,0,W,H);
+  if (entries.length < 2) return;
+  const maxVal = Math.max(cap.h1, cap.h2) * 1.05;
+  const pL=10,pR=10,pT=10,pB=24,cW=W-pL-pR,cH=H-pT-pB;
+  const xP = i => pL + (i/(entries.length-1))*cW;
+  const yP = v => pT + cH - (v/maxVal)*cH;
+  ctx.strokeStyle='#1e293b'; ctx.lineWidth=1;
+  [0.25,0.5,0.75,1.0].forEach(f=>{const y=pT+cH*(1-f);ctx.beginPath();ctx.moveTo(pL,y);ctx.lineTo(W-pR,y);ctx.stroke();});
+  [[entries.map(e=>e.h2),'#818cf8'],[entries.map(e=>e.h1),'#38bdf8']].forEach(([vals,color])=>{
+    ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=2;
+    vals.forEach((v,i)=>i===0?ctx.moveTo(xP(i),yP(v)):ctx.lineTo(xP(i),yP(v)));
+    ctx.stroke();
+  });
+  const last=entries[entries.length-1], lx=xP(entries.length-1);
+  [[last.h1,'#38bdf8'],[last.h2,'#818cf8']].forEach(([v,c])=>{ctx.beginPath();ctx.arc(lx,yP(v),4,0,Math.PI*2);ctx.fillStyle=c;ctx.fill();});
+  ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
+  ctx.textAlign='left'; ctx.fillText(entries[0].time,pL,H-6);
+  ctx.textAlign='right'; ctx.fillText(entries[entries.length-1].time,W-pR,H-6);
 }
- 
-function getTotalLoadOutBetween(facility, t1, t2) {
-  return loadOuts.filter(l => l.facility === facility && l.time >= t1 && l.time <= t2).reduce((s, l) => s + l.weight, 0);
-}
- 
-// ═══════════════════════════════════════════
-// TICKET SCANNER (Tesseract.js OCR)
-// ═══════════════════════════════════════════
-let tesseractWorker = null;
- 
-async function getWorker() {
-  if (!tesseractWorker) {
-    tesseractWorker = await Tesseract.createWorker('eng');
-  }
-  return tesseractWorker;
-}
- 
-async function handleTicketUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
- 
-  const preview = document.getElementById('scan-preview');
-  const img = document.getElementById('scan-img');
-  const status = document.getElementById('scan-status');
-  const scanZone = document.getElementById('scan-zone');
- 
-  // Show preview
-  const url = URL.createObjectURL(file);
-  img.src = url;
-  preview.style.display = 'block';
-  scanZone.style.display = 'none';
-  status.className = 'scan-status scanning';
-  status.textContent = 'Scanning ticket... (this may take a few seconds)';
- 
-  try {
-    const worker = await getWorker();
-    const { data } = await worker.recognize(file);
-    const text = data.text;
-    console.log('OCR result:', text);
- 
-    // Parse the ticket text
-    const parsed = parseTicketText(text);
- 
-    if (parsed.weight) {
-      status.className = 'scan-status scan-done';
-      let msg = `Found: ${parsed.weight.toLocaleString()} LBS`;
-      if (parsed.truck) msg += ` | Truck: ${parsed.truck}`;
-      if (parsed.hopper) msg += ` | Hopper ${parsed.hopper}`;
-      status.textContent = msg + ' — Review below and confirm.';
- 
-      // Auto-fill form
-      if (parsed.weight) {
-        document.getElementById('loadout-weight').value = parsed.weight;
-        document.getElementById('weight-hint').textContent = 'Auto-filled from ticket scan';
-        document.getElementById('weight-hint').style.display = 'block';
-      }
-      if (parsed.hopper) document.getElementById('loadout-hopper').value = parsed.hopper;
-      if (parsed.truck) document.getElementById('loadout-truck').value = parsed.truck;
-      if (parsed.date) document.getElementById('loadout-time').value = parsed.date;
-    } else {
-      status.className = 'scan-status scan-fail';
-      status.textContent = 'Could not find weight on ticket. Please enter manually below.';
-    }
-  } catch (err) {
-    console.error('OCR error:', err);
-    status.className = 'scan-status scan-fail';
-    status.textContent = 'Scan failed — please enter details manually.';
-  }
- 
-  // Reset file input for next upload
-  event.target.value = '';
-}
- 
-function parseTicketText(text) {
-  const result = { weight: null, truck: null, hopper: null, date: null };
-  const lines = text.toUpperCase();
- 
-  // Extract weight — look for common patterns on load tickets
-  // Patterns: "NET: 45,000", "NET WT 45000", "NET WEIGHT: 45000 LBS", "GROSS - TARE = NET", plain large numbers
-  const weightPatterns = [
-    /NET\s*(?:WT|WEIGHT|WGT)?\s*[:\-=]?\s*[\$]?\s*([\d,]+(?:\.\d+)?)\s*(?:LBS?|POUNDS?|#)?/i,
-    /(?:LOAD|TOTAL)\s*(?:WT|WEIGHT|WGT)?\s*[:\-=]?\s*([\d,]+(?:\.\d+)?)\s*(?:LBS?|POUNDS?|#)?/i,
-    /([\d,]{4,7})\s*(?:LBS?|POUNDS?|#)/i,
-    /(?:NET|LOAD)\s*[:\s]*([\d,]{4,7})/i,
-  ];
-  for (const pat of weightPatterns) {
-    const m = text.match(pat);
-    if (m) {
-      const w = parseFloat(m[1].replace(/,/g, ''));
-      if (w >= 1000 && w <= 200000) { result.weight = w; break; }
-    }
-  }
-  // Fallback: find the largest number that looks like a weight
-  if (!result.weight) {
-    const allNums = [...text.matchAll(/([\d,]{4,7})/g)].map(m => parseFloat(m[1].replace(/,/g, '')));
-    const plausible = allNums.filter(n => n >= 5000 && n <= 200000);
-    if (plausible.length) result.weight = Math.max(...plausible);
-  }
- 
-  // Extract truck number
-  const truckMatch = text.match(/(?:TRUCK|TRK|VEHICLE|VEH|UNIT)\s*[#:\-]?\s*([A-Z0-9\-]+)/i);
-  if (truckMatch) result.truck = truckMatch[1].trim();
- 
-  // Extract hopper
-  const hopperMatch = text.match(/HOPPER\s*[#:\-]?\s*([12])/i);
-  if (hopperMatch) result.hopper = hopperMatch[1];
- 
-  // Extract date
-  const dateMatch = text.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\s*(\d{1,2}):(\d{2})/);
-  if (dateMatch) {
-    let yr = parseInt(dateMatch[3]);
-    if (yr < 100) yr += 2000;
-    const dt = new Date(yr, parseInt(dateMatch[1])-1, parseInt(dateMatch[2]), parseInt(dateMatch[4]), parseInt(dateMatch[5]));
-    result.date = dt.toISOString().slice(0, 16);
-  }
- 
-  return result;
-}
- 
-// Drag & drop support
-const scanZone = document.getElementById('scan-zone');
-scanZone.addEventListener('dragover', e => { e.preventDefault(); scanZone.classList.add('drag-over'); });
-scanZone.addEventListener('dragleave', () => scanZone.classList.remove('drag-over'));
-scanZone.addEventListener('drop', e => {
-  e.preventDefault();
-  scanZone.classList.remove('drag-over');
-  if (e.dataTransfer.files.length) {
-    document.getElementById('ticket-file').files = e.dataTransfer.files;
-    handleTicketUpload({ target: { files: e.dataTransfer.files, value: '' } });
-  }
+
+window.addEventListener('load', ()=>{
+  updateFacility('DM'); updateFacility('RC');
+  setTimeout(()=>{ drawChart('chart-dm',rawData.DM,CAPACITY.DM); drawChart('chart-rc',rawData.RC,CAPACITY.RC); },100);
 });
- 
-// ═══════════════════════════════════════════
-// CALCULATED FLOW RATE
-// ═══════════════════════════════════════════
-function computeFlowRates(facility) {
-  const d = rawData[facility];
-  const rates = [null];
-  for (let i = 1; i < d.length; i++) {
-    const total1 = d[i-1].h1 + d[i-1].h2;
-    const total2 = d[i].h1 + d[i].h2;
-    const hours = (d[i].ts - d[i-1].ts) / (1000 * 60 * 60);
-    const loadOutWeight = getTotalLoadOutBetween(facility, d[i-1].ts, d[i].ts);
-    const netProduction = (total2 - total1) + loadOutWeight;
-    rates.push(hours > 0 ? Math.round(netProduction / hours) : 0);
-  }
-  return rates;
-}
- 
-// ═══════════════════════════════════════════
-// HOURS UNTIL FULL ESTIMATE
-// ═══════════════════════════════════════════
-function estimateHoursUntilFull(facility) {
-  const d = rawData[facility];
-  const cap = HOPPER_MAX[facility];
-  if (d.length < 3) return { h1: null, h2: null };
- 
-  // Use the last 3 readings to compute an average fill rate per hour for each hopper
-  const recent = d.slice(-3);
-  let h1Rate = 0, h2Rate = 0, totalHours = 0;
-  for (let i = 1; i < recent.length; i++) {
-    const hrs = (recent[i].ts - recent[i-1].ts) / (1000 * 60 * 60);
-    if (hrs > 0) {
-      // Account for load-outs in this interval
-      const lo = loadOuts.filter(l => l.facility === facility && l.time >= recent[i-1].ts && l.time <= recent[i].ts);
-      const loH1 = lo.filter(l => l.hopper === 1).reduce((s,l) => s + l.weight, 0);
-      const loH2 = lo.filter(l => l.hopper === 2).reduce((s,l) => s + l.weight, 0);
-      h1Rate += ((recent[i].h1 - recent[i-1].h1) + loH1) / hrs;
-      h2Rate += ((recent[i].h2 - recent[i-1].h2) + loH2) / hrs;
-      totalHours += hrs;
-    }
-  }
-  const intervals = recent.length - 1;
-  h1Rate = h1Rate / intervals;
-  h2Rate = h2Rate / intervals;
- 
-  const latest = d[d.length - 1];
-  const h1Remaining = cap.h1 - latest.h1;
-  const h2Remaining = cap.h2 - latest.h2;
- 
-  return {
-    h1: h1Rate > 50 ? Math.round((h1Remaining / h1Rate) * 10) / 10 : null,  // only show if filling at >50 lbs/hr
-    h2: h2Rate > 50 ? Math.round((h2Remaining / h2Rate) * 10) / 10 : null,
-    h1Rate: Math.round(h1Rate),
-    h2Rate: Math.round(h2Rate)
-  };
-}
- 
-function formatTimeToFull(hours) {
-  if (hours === null || hours <= 0) return 'Full or declining';
-  if (hours > 168) return '7+ days';
-  if (hours >= 24) return Math.round(hours / 24) + 'd ' + Math.round(hours % 24) + 'h';
-  if (hours >= 1) return Math.floor(hours) + 'h ' + Math.round((hours % 1) * 60) + 'm';
-  return Math.round(hours * 60) + ' min';
-}
- 
-// ═══════════════════════════════════════════
-// RENDERING
-// ═══════════════════════════════════════════
-let currentFacility = 'DM';
-let hopperChart, feedTankChart, flowRateChart;
- 
-function switchFacility(f) {
-  currentFacility = f;
-  document.getElementById('tab-dm').className = f === 'DM' ? 'tab active-dm' : 'tab';
-  document.getElementById('tab-rc').className = f === 'RC' ? 'tab active-rc' : 'tab';
-  document.getElementById('loadout-facility').value = f;
-  renderAll();
-}
- 
-function renderStatusCards() {
-  const d = rawData[currentFacility];
-  const cap = HOPPER_MAX[currentFacility];
-  const rates = computeFlowRates(currentFacility);
-  const latest = d[d.length - 1];
-  const prev = d.length > 1 ? d[d.length - 2] : latest;
-  const latestRate = rates[rates.length - 1];
-  const totalLO = loadOuts.filter(l => l.facility === currentFacility).reduce((s, l) => s + l.weight, 0);
-  const loCount = loadOuts.filter(l => l.facility === currentFacility).length;
-  // Subtract load-outs logged after the latest reading for real-time visual update
-  const recentLO = loadOuts.filter(l => l.facility === currentFacility && l.time >= latest.ts);
-  const loH1 = recentLO.filter(l => l.hopper === 1).reduce((s, l) => s + l.weight, 0);
-  const loH2 = recentLO.filter(l => l.hopper === 2).reduce((s, l) => s + l.weight, 0);
-  const adjH1 = Math.max(0, latest.h1 - loH1);
-  const adjH2 = Math.max(0, latest.h2 - loH2);
-  const pct1 = Math.round((adjH1 / cap.h1) * 100);
-  const pct2 = Math.round((adjH2 / cap.h2) * 100);
-  const ttf = estimateHoursUntilFull(currentFacility);
- 
-  function arrow(val) {
-    if (val > 0) return `<span style="color:#34d399">&#9650; +${val.toLocaleString()}</span>`;
-    if (val < 0) return `<span style="color:#f87171">&#9660; ${val.toLocaleString()}</span>`;
-    return `<span style="color:#64748b">&#8212; 0</span>`;
-  }
- 
-  function ttfBadge(hours) {
-    if (hours === null || hours <= 0) return '';
-    const color = hours <= 6 ? '#f87171' : hours <= 12 ? '#fbbf24' : '#34d399';
-    return ` <span style="color:${color};font-size:10px;font-weight:600">&#9202; ${formatTimeToFull(hours)} to full</span>`;
-  }
- 
-  document.getElementById('status-cards').innerHTML = `
-    <div class="status-card hopper1">
-      <div class="label">Hopper 1</div>
-      <div class="value">${adjH1.toLocaleString()}<span class="unit">LBS</span></div>
-      <div class="subtext">${arrow(latest.h1 - prev.h1)} vs prior &middot; ${pct1}% of max${loH1 > 0 ? ' <span style="color:#fbbf24;font-size:10px">(-' + loH1.toLocaleString() + ' loaded out)</span>' : ''}</div>
-      <div class="cap-bar"><div class="cap-fill" style="width:${Math.min(pct1,100)}%;background:${pct1>90?'#f87171':'#3b82f6'}"></div></div>
-    </div>
-    <div class="status-card hopper2">
-      <div class="label">Hopper 2</div>
-      <div class="value">${adjH2.toLocaleString()}<span class="unit">LBS</span></div>
-      <div class="subtext">${arrow(latest.h2 - prev.h2)} vs prior &middot; ${pct2}% of max${loH2 > 0 ? ' <span style="color:#fbbf24;font-size:10px">(-' + loH2.toLocaleString() + ' loaded out)</span>' : ''}</div>
-      <div class="cap-bar"><div class="cap-fill" style="width:${Math.min(pct2,100)}%;background:${pct2>90?'#f87171':'#8b5cf6'}"></div></div>
-    </div>
-    <div class="status-card feed-tank">
-      <div class="label">Feed Tank Level</div>
-      <div class="value">${latest.feedTank.toFixed(1)}<span class="unit">Ft</span></div>
-      <div class="subtext">${arrow(Math.round((latest.feedTank - prev.feedTank)*10)/10)} vs prior</div>
-    </div>
-    <div class="status-card flow-rate">
-      <div class="label">Calc. Flow Rate</div>
-      <div class="value">${latestRate !== null ? (latestRate >= 0 ? '+' : '') + latestRate.toLocaleString() : '—'}<span class="unit">lbs/hr</span></div>
-      <div class="subtext">${latest.feeding ? 'Centrifuge ON' : 'Centrifuge OFF'}</div>
-    </div>
-    <div class="status-card" style="border-left:3px solid ${ttf.h1 !== null && ttf.h1 <= 6 || ttf.h2 !== null && ttf.h2 <= 6 ? '#f87171' : ttf.h1 !== null && ttf.h1 <= 12 || ttf.h2 !== null && ttf.h2 <= 12 ? '#fbbf24' : '#34d399'}">
-      <div class="label">Hours Until Full</div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:4px">
-        <div>
-          <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px">H1</div>
-          <div style="font-size:22px;font-weight:800;color:${ttf.h1 !== null && ttf.h1 > 0 ? (ttf.h1 <= 6 ? '#f87171' : ttf.h1 <= 12 ? '#fbbf24' : '#34d399') : '#64748b'}">${ttf.h1 !== null && ttf.h1 > 0 ? formatTimeToFull(ttf.h1) : 'N/A'}</div>
-          <div style="font-size:9px;color:#64748b">${ttf.h1Rate ? '~' + Math.abs(ttf.h1Rate).toLocaleString() + ' lbs/hr' : ''}</div>
-        </div>
-        <div style="width:1px;height:36px;background:#334155"></div>
-        <div>
-          <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px">H2</div>
-          <div style="font-size:22px;font-weight:800;color:${ttf.h2 !== null && ttf.h2 > 0 ? (ttf.h2 <= 6 ? '#f87171' : ttf.h2 <= 12 ? '#fbbf24' : '#34d399') : '#64748b'}">${ttf.h2 !== null && ttf.h2 > 0 ? formatTimeToFull(ttf.h2) : 'N/A'}</div>
-          <div style="font-size:9px;color:#64748b">${ttf.h2Rate ? '~' + Math.abs(ttf.h2Rate).toLocaleString() + ' lbs/hr' : ''}</div>
-        </div>
-      </div>
-    </div>
-    <div class="status-card loads-out">
-      <div class="label">Loads Removed</div>
-      <div class="value">${loCount}<span class="unit">loads</span></div>
-      <div class="subtext">${totalLO > 0 ? totalLO.toLocaleString() + ' LBS total' : 'None logged yet'}</div>
-    </div>
-  `;
-}
- 
-function renderGauges() {
-  const d = rawData[currentFacility];
-  const cap = HOPPER_MAX[currentFacility];
-  const latest = d[d.length - 1];
-  // Adjust for load-outs after last reading
-  const recentLOG = loadOuts.filter(l => l.facility === currentFacility && l.time >= latest.ts);
-  const gLoH1 = recentLOG.filter(l => l.hopper === 1).reduce((s, l) => s + l.weight, 0);
-  const gLoH2 = recentLOG.filter(l => l.hopper === 2).reduce((s, l) => s + l.weight, 0);
-  const gAdjH1 = Math.max(0, latest.h1 - gLoH1);
-  const gAdjH2 = Math.max(0, latest.h2 - gLoH2);
-  const pct1 = Math.min((gAdjH1 / cap.h1) * 100, 100);
-  const pct2 = Math.min((gAdjH2 / cap.h2) * 100, 100);
-  const name = currentFacility === 'DM' ? 'Durham' : 'Rock Creek';
-  const ttf = estimateHoursUntilFull(currentFacility);
- 
-  function ttfGaugeLabel(hours, rate) {
-    if (hours === null || hours <= 0) return '<span style="color:#64748b;font-size:10px">Declining / steady</span>';
-    const color = hours <= 6 ? '#f87171' : hours <= 12 ? '#fbbf24' : '#34d399';
-    return `<span style="color:${color};font-size:11px;font-weight:700">&#9202; ${formatTimeToFull(hours)}</span><br><span style="color:#64748b;font-size:9px">~${Math.abs(rate).toLocaleString()} lbs/hr fill rate</span>`;
-  }
- 
-  document.getElementById('hopper-gauges').innerHTML = `
-    <div class="panel gauge-panel">
-      <div class="gauge-title">${name} &mdash; Current Hopper Fill</div>
-      <div class="hopper-visual">
-        <div class="hopper-container">
-          <div class="hopper-label">Hopper 1</div>
-          <div class="hopper-bar-wrapper">
-            <div class="hopper-bar-fill h1" style="height:${pct1}%"></div>
-          </div>
-          <div class="hopper-bar-pct h1">${pct1.toFixed(0)}%</div>
-          <div class="hopper-bar-lbs">${gAdjH1.toLocaleString()} LBS</div>
-          <div class="hopper-bar-max">of ${cap.h1.toLocaleString()}</div>
-          <div style="margin-top:6px">${ttfGaugeLabel(ttf.h1, ttf.h1Rate)}</div>
-        </div>
-        <div class="hopper-container">
-          <div class="hopper-label">Hopper 2</div>
-          <div class="hopper-bar-wrapper">
-            <div class="hopper-bar-fill h2" style="height:${pct2}%"></div>
-          </div>
-          <div class="hopper-bar-pct h2">${pct2.toFixed(0)}%</div>
-          <div class="hopper-bar-lbs">${gAdjH2.toLocaleString()} LBS</div>
-          <div class="hopper-bar-max">of ${cap.h2.toLocaleString()}</div>
-          <div style="margin-top:6px">${ttfGaugeLabel(ttf.h2, ttf.h2Rate)}</div>
-        </div>
-      </div>
-    </div>
-    <div class="panel gauge-panel">
-      <div class="gauge-title">Combined Hopper Weight Over Time</div>
-      <canvas id="combinedChart" height="180"></canvas>
-    </div>
-  `;
- 
-  const labels = d.map(r => r.time);
-  const combined = d.map(r => r.h1 + r.h2);
-  const maxCombined = cap.h1 + cap.h2;
-  new Chart(document.getElementById('combinedChart').getContext('2d'), {
-    type: 'line',
-    data: { labels, datasets: [
-      { label: 'Total Weight', data: combined, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', fill: true, tension: 0.35, borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: '#10b981' },
-      { label: 'Max Capacity', data: Array(labels.length).fill(maxCombined), borderColor: '#f8717155', borderDash: [6,4], borderWidth: 1.5, pointRadius: 0, fill: false }
-    ]},
-    options: { responsive: true, plugins: { legend: { labels: { color: '#94a3b8', usePointStyle: true, padding: 15 } } }, scales: { x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.4)' } }, y: { ticks: { color: '#64748b', callback: v => (v/1000)+'k' }, grid: { color: 'rgba(51,65,85,0.4)' } } } }
-  });
-}
- 
-function renderLoadOutLog() {
-  const logs = loadOuts.filter(l => l.facility === currentFacility).sort((a,b) => b.time - a.time);
-  const el = document.getElementById('loadout-log');
-  if (!logs.length) { el.innerHTML = '<div class="empty-log">No load-outs logged yet.<br>Upload a ticket photo or enter manually.</div>'; return; }
-  el.innerHTML = `<table><thead><tr><th>Time</th><th>Hopper</th><th>Weight</th><th>Notes</th><th></th></tr></thead><tbody>${logs.map(l => `<tr><td>${l.time.toLocaleString('en-US',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'})}</td><td>H${l.hopper}</td><td style="color:#fbbf24;font-weight:600">-${l.weight.toLocaleString()} LBS</td><td>${l.notes||'—'}</td><td><button class="delete-btn" onclick="removeLoadOut(${l.id})">&times;</button></td></tr>`).join('')}</tbody></table>`;
-}
- 
-function renderCharts() {
-  const d = rawData[currentFacility];
-  const cap = HOPPER_MAX[currentFacility];
-  const rates = computeFlowRates(currentFacility);
-  const labels = d.map(r => r.time);
-  const c1 = currentFacility === 'DM' ? '#3b82f6' : '#06b6d4';
-  const c2 = currentFacility === 'DM' ? '#8b5cf6' : '#a855f7';
- 
-  if (hopperChart) hopperChart.destroy();
-  hopperChart = new Chart(document.getElementById('hopperChart').getContext('2d'), {
-    type: 'line',
-    data: { labels, datasets: [
-      { label: 'Hopper 1', data: d.map(r => r.h1), borderColor: c1, backgroundColor: c1+'15', fill: true, tension: 0.35, borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: c1 },
-      { label: 'Hopper 2', data: d.map(r => r.h2), borderColor: c2, backgroundColor: c2+'15', fill: true, tension: 0.35, borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: c2 },
-      { label: 'H1 Max ('+cap.h1.toLocaleString()+')', data: Array(labels.length).fill(cap.h1), borderColor: c1+'55', borderDash: [6,4], borderWidth: 1.5, pointRadius: 0, fill: false },
-      { label: 'H2 Max ('+cap.h2.toLocaleString()+')', data: Array(labels.length).fill(cap.h2), borderColor: c2+'55', borderDash: [6,4], borderWidth: 1.5, pointRadius: 0, fill: false },
-    ]},
-    options: { responsive: true, interaction: { intersect: false, mode: 'index' }, plugins: { legend: { labels: { color: '#94a3b8', usePointStyle: true, pointStyle: 'circle', padding: 20 } }, tooltip: { backgroundColor: '#1e293b', borderColor: '#334155', borderWidth: 1, titleColor: '#e2e8f0', bodyColor: '#94a3b8', callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()} LBS` } } }, scales: { x: { ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 45 }, grid: { color: 'rgba(51,65,85,0.4)' } }, y: { ticks: { color: '#64748b', callback: v => (v/1000)+'k' }, grid: { color: 'rgba(51,65,85,0.4)' } } } }
-  });
- 
-  if (flowRateChart) flowRateChart.destroy();
-  const rateData = rates.slice(1);
-  const rateLabels = labels.slice(1);
-  flowRateChart = new Chart(document.getElementById('flowRateChart').getContext('2d'), {
-    type: 'bar',
-    data: { labels: rateLabels, datasets: [{ label: 'Calc. Flow Rate', data: rateData, backgroundColor: rateData.map(v => v >= 0 ? 'rgba(16,185,129,0.6)' : 'rgba(248,113,113,0.5)'), borderColor: rateData.map(v => v >= 0 ? '#10b981' : '#f87171'), borderWidth: 1.5, borderRadius: 4 }] },
-    options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.parsed.y >= 0 ? '+' : ''}${ctx.parsed.y.toLocaleString()} lbs/hr` } } }, scales: { x: { ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 45 }, grid: { color: 'rgba(51,65,85,0.4)' } }, y: { ticks: { color: '#64748b', callback: v => (v/1000)+'k' }, grid: { color: 'rgba(51,65,85,0.4)' } } } }
-  });
- 
-  if (feedTankChart) feedTankChart.destroy();
-  feedTankChart = new Chart(document.getElementById('feedTankChart').getContext('2d'), {
-    type: 'line',
-    data: { labels, datasets: [{ label: 'Feed Tank Level', data: d.map(r => r.feedTank), borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,0.08)', fill: true, tension: 0.35, borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: '#22d3ee' }] },
-    options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 45 }, grid: { color: 'rgba(51,65,85,0.4)' } }, y: { ticks: { color: '#64748b', callback: v => v+' ft' }, grid: { color: 'rgba(51,65,85,0.4)' }, suggestedMin: 6, suggestedMax: 12 } } }
-  });
-}
- 
-function renderTable() {
-  const d = rawData[currentFacility];
-  const rates = computeFlowRates(currentFacility);
-  document.getElementById('table-body').innerHTML = d.map((r, i) => {
-    const total = r.h1 + r.h2;
-    const prevT = i > 0 ? d[i-1].h1 + d[i-1].h2 : null;
-    const delta = prevT !== null ? total - prevT : null;
-    const lo = i > 0 ? getTotalLoadOutBetween(currentFacility, d[i-1].ts, r.ts) : 0;
-    const rate = rates[i];
-    return `<tr>
-      <td>${r.time}</td><td>${r.h1.toLocaleString()}</td><td>${r.h2.toLocaleString()}</td>
-      <td style="font-weight:600">${total.toLocaleString()}</td>
-      <td>${delta !== null ? `<span class="${delta>=0?'positive':'negative'}">${delta>=0?'+':''}${delta.toLocaleString()}</span>` : '—'}</td>
-      <td>${lo > 0 ? `<span class="load-marker">-${lo.toLocaleString()}</span>` : '—'}</td>
-      <td>${rate !== null ? `<span class="${rate>=0?'positive':'negative'}">${rate>=0?'+':''}${rate.toLocaleString()} lbs/hr</span>` : '—'}</td>
-      <td>${r.feedTank.toFixed(1)} ft</td>
-      <td class="${r.feeding?'feeding':'not-feeding'}">${r.feeding?'Feeding':'Off'}</td>
-    </tr>`;
-  }).join('');
-}
- 
-function updateLatestBadge() {
-  const allTs = [...rawData.DM, ...rawData.RC].map(d => d.ts instanceof Date ? d.ts.getTime() : d.ts);
-  const latest = new Date(Math.max(...allTs));
-  const opts = { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short' };
-  document.getElementById('latest-badge').textContent = 'Latest: ' + latest.toLocaleString('en-US', opts);
-}
- 
-function renderAll() { updateLatestBadge(); renderStatusCards(); renderGauges(); renderLoadOutLog(); renderCharts(); renderTable(); }
- 
-// ═══════════════════════════════════════════
-// SHARING / EXPORT
-// ═══════════════════════════════════════════
-function openShareModal() { document.getElementById('share-modal').classList.add('visible'); }
-function closeShareModal() { document.getElementById('share-modal').classList.remove('visible'); }
-function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
- 
-function copyLink() {
-  navigator.clipboard.writeText(window.location.href).then(() => { showToast('Link copied!'); closeShareModal(); }).catch(() => { showToast('Copy URL from address bar'); closeShareModal(); });
-}
- 
-function emailDashboard() {
-  const d = rawData[currentFacility]; const latest = d[d.length-1]; const rates = computeFlowRates(currentFacility);
-  const cap = HOPPER_MAX[currentFacility]; const name = currentFacility === 'DM' ? 'Durham' : 'Rock Creek';
-  const text = `CWS Solids — ${name} (${latest.time})\nH1: ${latest.h1.toLocaleString()} / ${cap.h1.toLocaleString()} LBS (${Math.round(latest.h1/cap.h1*100)}%)\nH2: ${latest.h2.toLocaleString()} / ${cap.h2.toLocaleString()} LBS (${Math.round(latest.h2/cap.h2*100)}%)\nFeed Tank: ${latest.feedTank} Ft\nCentrifuge: ${latest.feeding?'Feeding':'Off'}\nCalc. Flow: ${rates[rates.length-1]?.toLocaleString()||'N/A'} lbs/hr\nLoads Out: ${loadOuts.filter(l=>l.facility===currentFacility).length}`;
-  navigator.clipboard.writeText(text).then(() => { showToast('Summary copied!'); closeShareModal(); });
-}
- 
-function downloadFile() {
-  const blob = new Blob([document.documentElement.outerHTML], { type: 'text/html' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'cws-hopper-dashboard.html'; a.click();
-  showToast('Downloaded!'); closeShareModal();
-}
- 
-function exportCSV() {
-  const f = currentFacility; const d = rawData[f]; const rates = computeFlowRates(f);
-  let csv = 'Time,H1_LBS,H1_Max,H1_Pct,H2_LBS,H2_Max,H2_Pct,Total,Delta,LoadOuts,CalcFlowRate_lbs_hr,FeedTank_Ft,Centrifuge\n';
-  const cap = HOPPER_MAX[f];
-  d.forEach((r,i) => {
-    const t = r.h1+r.h2; const pt = i>0?d[i-1].h1+d[i-1].h2:''; const dl = i>0?t-pt:'';
-    const lo = i>0?getTotalLoadOutBetween(f,d[i-1].ts,r.ts):'';
-    csv += `${r.time},${r.h1},${cap.h1},${Math.round(r.h1/cap.h1*100)}%,${r.h2},${cap.h2},${Math.round(r.h2/cap.h2*100)}%,${t},${dl},${lo},${rates[i]??''},${r.feedTank},${r.feeding?'Feeding':'Off'}\n`;
-  });
-  const logs = loadOuts.filter(l=>l.facility===f);
-  if (logs.length) { csv += '\nLOAD-OUTS\nTime,Hopper,Weight,Notes\n'; logs.forEach(l => csv += `${l.time.toLocaleString()},H${l.hopper},${l.weight},${l.notes||''}\n`); }
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download = `cws-${f.toLowerCase()}-data.csv`; a.click(); showToast('CSV exported!');
-}
- 
-// Init
-document.getElementById('loadout-time').value = new Date().toISOString().slice(0,16);
-renderAll();
-// Load persisted load-outs from Google Sheets
-loadFromSheets();
+window.addEventListener('resize',()=>{ drawChart('chart-dm',rawData.DM,CAPACITY.DM); drawChart('chart-rc',rawData.RC,CAPACITY.RC); });
 </script>
 </body>
 </html>
