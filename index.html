@@ -263,15 +263,6 @@
   </table>
 </div>
  
-<!-- Centrifuge Events Log -->
-<div class="shutdown-panel">
-  <h3>Centrifuge Events &mdash; Last 10</h3>
-  <div class="panel-desc">Tracks when the centrifuge starts or stops feeding at each facility.</div>
-  <div class="shutdown-log" id="shutdown-log">
-    <div style="text-align:center;padding:20px;color:#475569;font-size:13px">No centrifuge events logged yet.</div>
-  </div>
-</div>
- 
 <div class="footer">Data sourced from CWS Solids automated reports (svcSolids@cleanwaterservices.org) &mdash; Live data from Google Sheets &middot; Auto-refreshes every 5 min</div>
  
  
@@ -742,7 +733,15 @@ function renderGauges() {
         </div>
       </div>
     </div>
+    <div class="shutdown-panel" style="margin-bottom:0">
+      <h3>Centrifuge Events &mdash; Last 10</h3>
+      <div class="panel-desc">Tracks when the centrifuge starts or stops feeding.</div>
+      <div class="shutdown-log" id="shutdown-log">
+        <div style="text-align:center;padding:20px;color:#475569;font-size:13px">No centrifuge events logged yet.</div>
+      </div>
+    </div>
   `;
+  renderShutdownLog();
 }
  
 function renderLoadOutLog() {
@@ -834,7 +833,7 @@ function renderShutdownLog() {
   }).join('')}</tbody></table>`;
 }
  
-function renderAll() { updateLatestBadge(); renderStatusCards(); renderGauges(); renderLoadOutLog(); renderShutdownLog(); renderCharts(); renderTable(); }
+function renderAll() { updateLatestBadge(); renderStatusCards(); renderGauges(); renderLoadOutLog(); renderCharts(); renderTable(); }
  
 // ═══════════════════════════════════════════
 // SHARING / EXPORT
