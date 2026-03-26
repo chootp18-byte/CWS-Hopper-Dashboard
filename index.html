@@ -288,7 +288,7 @@ const rawData = { DM: [], RC: [] };
 // ═══════════════════════════════════════════
 // LOAD-OUT TRACKING (Google Sheets backed)
 // ═══════════════════════════════════════════
-const SHEETS_API = 'https://script.google.com/macros/s/AKfycbygx7BIZvIxNYLuSS5KsmIzeYX37ay728m-Xn7AF6MINAbQYyp6gHONAuoYjuMjkbQKsQ/exec';
+const SHEETS_API = 'https://script.google.com/macros/s/AKfycby3izDn8sdIYVdEv4eMsvfZn2k_vVHCvqvfO5Lptsy330tDewb8s2yxtPs9tO_89-YTsA/exec';
 let loadOuts = [];
 let loadOutId = 0;
 let shutdowns = [];
@@ -821,7 +821,7 @@ function renderShutdownLog() {
   }
  
   el.innerHTML = `<table><thead><tr><th>Time</th><th>Event</th><th>H1 (LBS)</th><th>H2 (LBS)</th><th>Total (LBS)</th><th>Feed Tank (Ft)</th></tr></thead><tbody>${events.map(s => {
-    const total = (s.h1 + s.h2).toLocaleString();
+    const total = s.total.toLocaleString();
     return `<tr>
       <td>${s.time.toLocaleString('en-US', {month:'numeric', day:'numeric', hour:'numeric', minute:'2-digit', hour12:true})}</td>
       <td class="${s.event === 'Started' ? 'event-started' : 'event-stopped'}">${s.event === 'Started' ? 'Started Feeding' : 'Stopped Feeding'}</td>
@@ -931,6 +931,7 @@ async function fetchAllData() {
         event: s.Event,
         h1: parseFloat(s.H1) || 0,
         h2: parseFloat(s.H2) || 0,
+        total: parseFloat(s.Total) || ((parseFloat(s.H1) || 0) + (parseFloat(s.H2) || 0)),
         feedTank: parseFloat(s.FeedTank) || 0
       }));
  
