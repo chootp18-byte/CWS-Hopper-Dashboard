@@ -343,8 +343,10 @@ async function addLoadOut() {
 }
  
 async function removeLoadOut(id) {
-  const entry = loadOuts.find(l => l.id === id);
-  loadOuts = loadOuts.filter(l => l.id !== id);
+  // Coerce to string for consistent comparison (IDs from Sheets are strings)
+  const idStr = String(id);
+  const entry = loadOuts.find(l => String(l.id) === idStr);
+  loadOuts = loadOuts.filter(l => String(l.id) !== idStr);
   renderAll();
  
   // Delete from Google Sheets if it has a sheet ID
@@ -614,10 +616,12 @@ function renderStatusCards() {
   const pct1 = Math.round((latest.h1 / cap.h1) * 100);
   const pct2 = Math.round((latest.h2 / cap.h2) * 100);
  
-  // Combined total with load-out subtraction
+  // Combined total — only subtract load-outs logged AFTER the latest email reading
+  // (load-outs before the latest email are already reflected in the reported weights)
   const currentTotal = (latest.h1 || 0) + (latest.h2 || 0);
   const prevTotal = (prev.h1 || 0) + (prev.h2 || 0);
-  const recentLO = getTotalLoadOutAfter(currentFacility, latest.ts instanceof Date ? latest.ts : new Date(latest.ts));
+  const latestTs = latest.ts instanceof Date ? latest.ts : new Date(latest.ts);
+  const recentLO = getTotalLoadOutAfter(currentFacility, latestTs);
   const adjTotal = Math.max(0, currentTotal - recentLO);
   const pctTotal = maxCombined > 0 ? Math.round((adjTotal / maxCombined) * 100) : 0;
  
@@ -733,7 +737,7 @@ function renderLoadOutLog() {
   const logs = loadOuts.filter(l => l.facility === currentFacility).sort((a,b) => b.time - a.time);
   const el = document.getElementById('loadout-log');
   if (!logs.length) { el.innerHTML = '<div class="empty-log">No load-outs logged yet.<br>Upload a ticket photo or enter manually.</div>'; return; }
-  el.innerHTML = `<table><thead><tr><th>Time</th><th>Weight</th><th>Notes</th><th></th></tr></thead><tbody>${logs.map(l => `<tr><td>${l.time.toLocaleString('en-US',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'})}</td><td style="color:#fbbf24;font-weight:600">-${l.weight.toLocaleString()} LBS</td><td>${l.notes||'—'}</td><td><button class="delete-btn" onclick="removeLoadOut(${l.id})">&times;</button></td></tr>`).join('')}</tbody></table>`;
+  el.innerHTML = `<table><thead><tr><th>Time</th><th>Weight</th><th>Notes</th><th></th></tr></thead><tbody>${logs.map(l => `<tr><td>${l.time.toLocaleString('en-US',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'})}</td><td style="color:#fbbf24;font-weight:600">-${l.weight.toLocaleString()} LBS</td><td>${l.notes||'—'}</td><td><button class="delete-btn" onclick="removeLoadOut('${l.id}')">&times;</button></td></tr>`).join('')}</tbody></table>`;
 }
  
 function renderCharts() {
