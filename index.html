@@ -266,7 +266,7 @@
   </table>
 </div>
  
-<div class="footer">Data sourced from CWS Solids automated reports (svcSolids@cleanwaterservices.org) &mdash; Generated Mar 25, 2026</div>
+<div class="footer">Data sourced from CWS Solids automated reports (svcSolids@cleanwaterservices.org) &mdash; Live data from Google Sheets &middot; Auto-refreshes every 5 min</div>
  
 <!-- Share Modal -->
 <div class="modal-overlay" id="share-modal">
@@ -296,36 +296,8 @@ const HOPPER_MAX = {
 // ═══════════════════════════════════════════
 // RAW DATA from Gmail emails
 // ═══════════════════════════════════════════
-const rawData = {
-  DM: [
-    { time: "3/24 9:00 AM",  ts: new Date(2026,2,24,9,0),  h1: 74156,  h2: 130312, feeding: true,  feedTank: 10.8 },
-    { time: "3/24 5:00 PM",  ts: new Date(2026,2,24,17,0), h1: 126375, h2: 66187,  feeding: true,  feedTank: 10.3 },
-    { time: "3/24 7:00 PM",  ts: new Date(2026,2,24,19,0), h1: 70875,  h2: 74812,  feeding: true,  feedTank: 10.3 },
-    { time: "3/24 9:00 PM",  ts: new Date(2026,2,24,21,0), h1: 70687,  h2: 87937,  feeding: true,  feedTank: 9.8 },
-    { time: "3/24 11:00 PM", ts: new Date(2026,2,24,23,0), h1: 70593,  h2: 100968, feeding: true,  feedTank: 9.3 },
-    { time: "3/25 1:00 AM",  ts: new Date(2026,2,25,1,0),  h1: 70687,  h2: 113906, feeding: true,  feedTank: 8.9 },
-    { time: "3/25 3:00 AM",  ts: new Date(2026,2,25,3,0),  h1: 70687,  h2: 126656, feeding: true,  feedTank: 8.8 },
-    { time: "3/25 5:00 AM",  ts: new Date(2026,2,25,5,0),  h1: 79031,  h2: 130968, feeding: true,  feedTank: 8.6 },
-    { time: "3/25 7:00 AM",  ts: new Date(2026,2,25,7,0),  h1: 91593,  h2: 131062, feeding: true,  feedTank: 7.9 },
-    { time: "3/25 9:00 AM",  ts: new Date(2026,2,25,9,0),  h1: 102093, h2: 130781, feeding: false, feedTank: 8.5 },
-    { time: "3/25 11:00 AM", ts: new Date(2026,2,25,11,0), h1: 102937, h2: 130875, feeding: false, feedTank: 9.1 },
-    { time: "3/25 1:00 PM",  ts: new Date(2026,2,25,13,0), h1: 102843, h2: 130687, feeding: false, feedTank: 10.0 },
-  ],
-  RC: [
-    { time: "3/24 9:00 AM",  ts: new Date(2026,2,24,9,0),  h1: 110560, h2: 51700,  feeding: false, feedTank: 10.2 },
-    { time: "3/24 5:00 PM",  ts: new Date(2026,2,24,17,0), h1: 18910,  h2: 77850,  feeding: true,  feedTank: 9.3 },
-    { time: "3/24 7:00 PM",  ts: new Date(2026,2,24,19,0), h1: 18910,  h2: 95620,  feeding: true,  feedTank: 9.0 },
-    { time: "3/24 9:00 PM",  ts: new Date(2026,2,24,21,0), h1: 21580,  h2: 110260, feeding: true,  feedTank: 8.8 },
-    { time: "3/24 11:00 PM", ts: new Date(2026,2,24,23,0), h1: 38430,  h2: 109720, feeding: true,  feedTank: 8.8 },
-    { time: "3/25 1:00 AM",  ts: new Date(2026,2,25,1,0),  h1: 55510,  h2: 109340, feeding: true,  feedTank: 8.7 },
-    { time: "3/25 3:00 AM",  ts: new Date(2026,2,25,3,0),  h1: 72280,  h2: 109270, feeding: true,  feedTank: 8.6 },
-    { time: "3/25 5:00 AM",  ts: new Date(2026,2,25,5,0),  h1: 63900,  h2: 74190,  feeding: true,  feedTank: 8.6 },
-    { time: "3/25 7:00 AM",  ts: new Date(2026,2,25,7,0),  h1: 78230,  h2: 73890,  feeding: false, feedTank: 8.7 },
-    { time: "3/25 9:00 AM",  ts: new Date(2026,2,25,9,0),  h1: 60470,  h2: 73660,  feeding: false, feedTank: 9.5 },
-    { time: "3/25 11:00 AM", ts: new Date(2026,2,25,11,0), h1: 17690,  h2: 73660,  feeding: false, feedTank: 10.9 },
-    { time: "3/25 1:00 PM",  ts: new Date(2026,2,25,13,0), h1: 17920,  h2: 73810,  feeding: false, feedTank: 11.5 },
-  ]
-};
+// Data loaded dynamically from Google Sheets
+const rawData = { DM: [], RC: [] };
  
 // ═══════════════════════════════════════════
 // LOAD-OUT TRACKING (Google Sheets backed)
@@ -334,27 +306,10 @@ const SHEETS_API = 'https://script.google.com/macros/s/AKfycbwVT_viLdxJAC2LxAZ2c
 let loadOuts = [];
 let loadOutId = 0;
  
-// Load existing load-outs from Google Sheets on startup
+// Load-outs are now loaded by fetchAllData() on startup
+// This function kept for backward compatibility
 async function loadFromSheets() {
-  try {
-    const resp = await fetch(SHEETS_API);
-    const json = await resp.json();
-    if (json.status === 'ok' && json.data) {
-      loadOuts = json.data.map(r => ({
-        id: r.ID || (++loadOutId + ''),
-        sheetId: r.ID,
-        time: new Date(r.Timestamp),
-        facility: r.Facility,
-        weight: parseFloat(r.Weight_LBS) || 0,
-        notes: [r.Truck, r.Notes].filter(Boolean).join(' — ')
-      }));
-      loadOutId = loadOuts.length;
-      showToast(`Loaded ${loadOuts.length} load-outs from Google Sheets`);
-      renderAll();
-    }
-  } catch (e) {
-    console.warn('Sheets load failed, using local only:', e);
-  }
+  // Now handled by fetchAllData()
 }
  
 async function addLoadOut() {
@@ -902,11 +857,74 @@ function exportCSV() {
   a.download = `cws-${f.toLowerCase()}-data.csv`; a.click(); showToast('CSV exported!');
 }
  
+// ═══════════════════════════════════════════
+// LIVE DATA FETCH FROM GOOGLE SHEETS
+// ═══════════════════════════════════════════
+async function fetchAllData() {
+  const loadingEl = document.getElementById('status-cards');
+  loadingEl.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;grid-column:1/-1"><div style="font-size:18px;font-weight:600">Loading live data...</div><div style="font-size:12px;margin-top:8px">Fetching from Google Sheets</div></div>';
+ 
+  try {
+    const resp = await fetch(SHEETS_API + '?action=all');
+    const json = await resp.json();
+ 
+    if (json.status === 'ok') {
+      // Parse readings into rawData format
+      const readings = json.readings || [];
+      rawData.DM = [];
+      rawData.RC = [];
+ 
+      readings.sort((a, b) => new Date(a.Timestamp) - new Date(b.Timestamp));
+ 
+      for (const r of readings) {
+        const ts = new Date(r.Timestamp);
+        const timeStr = (ts.getMonth() + 1) + '/' + ts.getDate() + ' ' +
+          ts.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        const entry = {
+          time: timeStr,
+          ts: ts,
+          h1: parseFloat(r.H1) || 0,
+          h2: parseFloat(r.H2) || 0,
+          feeding: r.Feeding === true || r.Feeding === 'true' || r.Feeding === 'TRUE',
+          feedTank: parseFloat(r.FeedTank) || 0
+        };
+ 
+        if (r.Facility === 'DM') rawData.DM.push(entry);
+        else if (r.Facility === 'RC') rawData.RC.push(entry);
+      }
+ 
+      // Parse load-outs
+      const loadoutData = json.loadouts || [];
+      loadOuts = loadoutData.map(r => ({
+        id: r.ID || (++loadOutId + ''),
+        sheetId: r.ID,
+        time: new Date(r.Timestamp),
+        facility: r.Facility,
+        weight: parseFloat(r.Weight_LBS) || 0,
+        notes: [r.Truck, r.Notes].filter(Boolean).join(' — ')
+      }));
+      loadOutId = loadOuts.length;
+ 
+      if (rawData.DM.length === 0 && rawData.RC.length === 0) {
+        loadingEl.innerHTML = '<div style="text-align:center;padding:40px;color:#fbbf24;grid-column:1/-1"><div style="font-size:18px;font-weight:600">No readings yet</div><div style="font-size:12px;margin-top:8px">Waiting for first data update from scheduled task</div></div>';
+        return;
+      }
+ 
+      showToast(`Loaded ${readings.length} readings & ${loadOuts.length} load-outs`);
+      renderAll();
+    }
+  } catch (e) {
+    console.error('Failed to fetch data:', e);
+    loadingEl.innerHTML = '<div style="text-align:center;padding:40px;color:#f87171;grid-column:1/-1"><div style="font-size:18px;font-weight:600">Failed to load data</div><div style="font-size:12px;margin-top:8px">Check your connection and refresh</div></div>';
+  }
+}
+ 
 // Init
 document.getElementById('loadout-time').value = new Date().toISOString().slice(0,16);
-renderAll();
-// Load persisted load-outs from Google Sheets
-loadFromSheets();
+// Fetch live data from Google Sheets (replaces hardcoded rawData)
+fetchAllData();
+// Auto-refresh every 5 minutes
+setInterval(fetchAllData, 5 * 60 * 1000);
 </script>
 </body>
 </html>
