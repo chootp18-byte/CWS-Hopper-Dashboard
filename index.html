@@ -18,11 +18,6 @@
   .live-badge .dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; animation: pulse 2s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(0.8); } }
  
-  .share-btn, .export-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid; transition: all 0.2s; }
-  .share-btn { background: rgba(59,130,246,0.1); border-color: rgba(59,130,246,0.3); color: #60a5fa; }
-  .share-btn:hover { background: rgba(59,130,246,0.2); }
-  .export-btn { background: rgba(139,92,246,0.1); border-color: rgba(139,92,246,0.3); color: #a78bfa; }
-  .export-btn:hover { background: rgba(139,92,246,0.2); }
  
   .facility-tabs { display: flex; justify-content: center; gap: 12px; margin-bottom: 24px; }
   .tab { padding: 10px 28px; border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.3s; border: 1px solid #334155; background: #1e293b; color: #94a3b8; }
@@ -67,8 +62,8 @@
   .hopper-label { font-size: 11px; font-weight: 600; color: #94a3b8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
   .hopper-bar-wrapper { width: 80px; height: 160px; background: #0f172a; border-radius: 8px; border: 2px solid #334155; position: relative; overflow: hidden; }
   .hopper-bar-fill { position: absolute; bottom: 0; left: 0; right: 0; border-radius: 0 0 6px 6px; transition: height 0.8s ease; }
-  .hopper-bar-fill.h1 { background: linear-gradient(180deg, #60a5fa, #3b82f6); }
-  .hopper-bar-fill.h2 { background: linear-gradient(180deg, #a78bfa, #7c3aed); }
+  .hopper-bar-fill.h1 { background: linear-gradient(180deg, #60a5fa, #3b82f6); transition: background 0.5s; }
+  .hopper-bar-fill.h2 { background: linear-gradient(180deg, #a78bfa, #7c3aed); transition: background 0.5s; }
   .hopper-bar-pct { font-size: 22px; font-weight: 800; margin-top: 8px; }
   .hopper-bar-pct.h1 { color: #60a5fa; }
   .hopper-bar-pct.h2 { color: #a78bfa; }
@@ -153,14 +148,7 @@
   <div class="subtitle">Clean Water Services &mdash; Durham &amp; Rock Creek Facilities</div>
   <div class="header-row">
     <div class="live-badge"><span class="dot"></span> <span id="latest-badge">Loading...</span></div>
-    <div class="share-btn" onclick="openShareModal()">
-      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
-      Share
-    </div>
-    <div class="export-btn" onclick="exportCSV()">
-      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-      Export CSV
-    </div>
+    <div class="live-badge" style="background:rgba(59,130,246,0.1);border-color:rgba(59,130,246,0.3);color:#60a5fa"><span id="refresh-badge">Refreshing...</span></div>
   </div>
 </div>
  
@@ -257,7 +245,7 @@
         <th>Total</th>
         <th>Delta</th>
         <th>Load-Outs</th>
-        <th>Calc. Flow Rate</th>
+        <th>Net Change Rate</th>
         <th>Feed Tank</th>
         <th>Centrifuge</th>
       </tr>
@@ -268,17 +256,6 @@
  
 <div class="footer">Data sourced from CWS Solids automated reports (svcSolids@cleanwaterservices.org) &mdash; Live data from Google Sheets &middot; Auto-refreshes every 5 min</div>
  
-<!-- Share Modal -->
-<div class="modal-overlay" id="share-modal">
-  <div class="modal">
-    <h2>Share This Dashboard</h2>
-    <p>Choose how to share with your coworkers:</p>
-    <div class="modal-option" onclick="copyLink()"><h4>Copy Link to File</h4><p>Share the HTML file directly &mdash; anyone can open it in a browser.</p></div>
-    <div class="modal-option" onclick="emailDashboard()"><h4>Copy Snapshot for Email / Slack</h4><p>Copies a text summary of current readings to clipboard.</p></div>
-    <div class="modal-option" onclick="downloadFile()"><h4>Download Dashboard File</h4><p>Save the complete interactive dashboard as HTML to send to anyone.</p></div>
-    <button class="modal-close" onclick="closeShareModal()">Close</button>
-  </div>
-</div>
  
 <div class="toast" id="toast"></div>
  
@@ -565,25 +542,29 @@ function estimateHoursUntilFull(facility) {
   const d = rawData[facility];
   const cap = HOPPER_MAX[facility];
   const maxCombined = cap.h1 + cap.h2;
-  if (d.length < 3) return { combined: null, combinedRate: null };
+  if (d.length < 2) return { combined: null, combinedRate: null };
  
-  // Use the last 3 readings to compute average combined fill rate per hour
-  const recent = d.slice(-3);
+  // Use up to last 3 readings to compute average combined fill rate per hour
+  const recent = d.slice(-Math.min(3, d.length));
   let combinedRate = 0;
+  let validIntervals = 0;
   for (let i = 1; i < recent.length; i++) {
-    const hrs = (recent[i].ts - recent[i-1].ts) / (1000 * 60 * 60);
+    const t1 = recent[i-1].ts instanceof Date ? recent[i-1].ts : new Date(recent[i-1].ts);
+    const t2 = recent[i].ts instanceof Date ? recent[i].ts : new Date(recent[i].ts);
+    const hrs = (t2 - t1) / (1000 * 60 * 60);
     if (hrs > 0) {
-      const total1 = recent[i-1].h1 + recent[i-1].h2;
-      const total2 = recent[i].h1 + recent[i].h2;
-      const lo = getTotalLoadOutBetween(facility, recent[i-1].ts, recent[i].ts);
+      const total1 = (recent[i-1].h1 || 0) + (recent[i-1].h2 || 0);
+      const total2 = (recent[i].h1 || 0) + (recent[i].h2 || 0);
+      const lo = getTotalLoadOutBetween(facility, t1, t2);
       combinedRate += ((total2 - total1) + lo) / hrs;
+      validIntervals++;
     }
   }
-  const intervals = recent.length - 1;
-  combinedRate = combinedRate / intervals;
+  if (validIntervals === 0) return { combined: null, combinedRate: null };
+  combinedRate = combinedRate / validIntervals;
  
   const latest = d[d.length - 1];
-  const currentTotal = latest.h1 + latest.h2;
+  const currentTotal = (latest.h1 || 0) + (latest.h2 || 0);
   const remaining = maxCombined - currentTotal;
  
   return {
@@ -630,11 +611,11 @@ function renderStatusCards() {
   const pct2 = Math.round((latest.h2 / cap.h2) * 100);
  
   // Combined total with load-out subtraction
-  const currentTotal = latest.h1 + latest.h2;
-  const prevTotal = prev.h1 + prev.h2;
-  const recentLO = getTotalLoadOutAfter(currentFacility, latest.ts);
+  const currentTotal = (latest.h1 || 0) + (latest.h2 || 0);
+  const prevTotal = (prev.h1 || 0) + (prev.h2 || 0);
+  const recentLO = getTotalLoadOutAfter(currentFacility, latest.ts instanceof Date ? latest.ts : new Date(latest.ts));
   const adjTotal = Math.max(0, currentTotal - recentLO);
-  const pctTotal = Math.round((adjTotal / maxCombined) * 100);
+  const pctTotal = maxCombined > 0 ? Math.round((adjTotal / maxCombined) * 100) : 0;
  
   // Hours until full (combined)
   const ttf = estimateHoursUntilFull(currentFacility);
@@ -651,19 +632,19 @@ function renderStatusCards() {
       <div class="label">Hopper 1</div>
       <div class="value">${latest.h1.toLocaleString()}<span class="unit">LBS</span></div>
       <div class="subtext">${arrow(latest.h1 - prev.h1)} vs prior &middot; ${pct1}% of max</div>
-      <div class="cap-bar"><div class="cap-fill" style="width:${Math.min(pct1,100)}%;background:${pct1>90?'#f87171':'#3b82f6'}"></div></div>
+      <div class="cap-bar"><div class="cap-fill" style="width:${Math.min(pct1,100)}%;background:${pct1>80?'#f87171':pct1>50?'#fbbf24':'#3b82f6'}"></div></div>
     </div>
     <div class="status-card hopper2">
       <div class="label">Hopper 2</div>
       <div class="value">${latest.h2.toLocaleString()}<span class="unit">LBS</span></div>
       <div class="subtext">${arrow(latest.h2 - prev.h2)} vs prior &middot; ${pct2}% of max</div>
-      <div class="cap-bar"><div class="cap-fill" style="width:${Math.min(pct2,100)}%;background:${pct2>90?'#f87171':'#8b5cf6'}"></div></div>
+      <div class="cap-bar"><div class="cap-fill" style="width:${Math.min(pct2,100)}%;background:${pct2>80?'#f87171':pct2>50?'#fbbf24':'#8b5cf6'}"></div></div>
     </div>
     <div class="status-card total-hopper">
       <div class="label">Total Hopper Weight</div>
       <div class="value">${adjTotal.toLocaleString()}<span class="unit">LBS</span></div>
       <div class="subtext">${arrow(currentTotal - prevTotal)} vs prior &middot; ${pctTotal}% of max (${maxCombined.toLocaleString()})${recentLO > 0 ? ' <span style="color:#fbbf24;font-size:10px">(-' + recentLO.toLocaleString() + ' loaded out)</span>' : ''}</div>
-      <div class="cap-bar"><div class="cap-fill" style="width:${Math.min(pctTotal,100)}%;background:${pctTotal>90?'#f87171':'#10b981'}"></div></div>
+      <div class="cap-bar"><div class="cap-fill" style="width:${Math.min(pctTotal,100)}%;background:${pctTotal>80?'#f87171':pctTotal>50?'#fbbf24':'#10b981'}"></div></div>
     </div>
     <div class="status-card feed-tank">
       <div class="label">Feed Tank Level</div>
@@ -671,7 +652,7 @@ function renderStatusCards() {
       <div class="subtext">${arrow(Math.round((latest.feedTank - prev.feedTank)*10)/10)} vs prior</div>
     </div>
     <div class="status-card flow-rate">
-      <div class="label">Calc. Flow Rate</div>
+      <div class="label">Net Change Rate</div>
       <div class="value">${latestRate !== null ? (latestRate >= 0 ? '+' : '') + latestRate.toLocaleString() : '—'}<span class="unit">lbs/hr</span></div>
       <div class="subtext">${latest.feeding ? 'Centrifuge ON' : 'Centrifuge OFF'}</div>
     </div>
@@ -707,18 +688,18 @@ function renderGauges() {
         <div class="hopper-container">
           <div class="hopper-label">Hopper 1</div>
           <div class="hopper-bar-wrapper">
-            <div class="hopper-bar-fill h1" style="height:${pct1}%"></div>
+            <div class="hopper-bar-fill h1" style="height:${pct1}%;background:${pct1>80?'linear-gradient(180deg,#f87171,#ef4444)':pct1>50?'linear-gradient(180deg,#fbbf24,#f59e0b)':'linear-gradient(180deg,#60a5fa,#3b82f6)'}"></div>
           </div>
-          <div class="hopper-bar-pct h1">${pct1.toFixed(0)}%</div>
+          <div class="hopper-bar-pct h1" style="color:${pct1>80?'#f87171':pct1>50?'#fbbf24':'#60a5fa'}">${pct1.toFixed(0)}%</div>
           <div class="hopper-bar-lbs">${latest.h1.toLocaleString()} LBS</div>
           <div class="hopper-bar-max">of ${cap.h1.toLocaleString()}</div>
         </div>
         <div class="hopper-container">
           <div class="hopper-label">Hopper 2</div>
           <div class="hopper-bar-wrapper">
-            <div class="hopper-bar-fill h2" style="height:${pct2}%"></div>
+            <div class="hopper-bar-fill h2" style="height:${pct2}%;background:${pct2>80?'linear-gradient(180deg,#f87171,#ef4444)':pct2>50?'linear-gradient(180deg,#fbbf24,#f59e0b)':'linear-gradient(180deg,#a78bfa,#7c3aed)'}"></div>
           </div>
-          <div class="hopper-bar-pct h2">${pct2.toFixed(0)}%</div>
+          <div class="hopper-bar-pct h2" style="color:${pct2>80?'#f87171':pct2>50?'#fbbf24':'#a78bfa'}">${pct2.toFixed(0)}%</div>
           <div class="hopper-bar-lbs">${latest.h2.toLocaleString()} LBS</div>
           <div class="hopper-bar-max">of ${cap.h2.toLocaleString()}</div>
         </div>
@@ -775,7 +756,7 @@ function renderCharts() {
   const rateLabels = labels.slice(1);
   flowRateChart = new Chart(document.getElementById('flowRateChart').getContext('2d'), {
     type: 'bar',
-    data: { labels: rateLabels, datasets: [{ label: 'Calc. Flow Rate', data: rateData, backgroundColor: rateData.map(v => v >= 0 ? 'rgba(16,185,129,0.6)' : 'rgba(248,113,113,0.5)'), borderColor: rateData.map(v => v >= 0 ? '#10b981' : '#f87171'), borderWidth: 1.5, borderRadius: 4 }] },
+    data: { labels: rateLabels, datasets: [{ label: 'Net Change Rate', data: rateData, backgroundColor: rateData.map(v => v >= 0 ? 'rgba(16,185,129,0.6)' : 'rgba(248,113,113,0.5)'), borderColor: rateData.map(v => v >= 0 ? '#10b981' : '#f87171'), borderWidth: 1.5, borderRadius: 4 }] },
     options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.parsed.y >= 0 ? '+' : ''}${ctx.parsed.y.toLocaleString()} lbs/hr` } } }, scales: { x: { ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 45 }, grid: { color: 'rgba(51,65,85,0.4)' } }, y: { ticks: { color: '#64748b', callback: v => (v/1000)+'k' }, grid: { color: 'rgba(51,65,85,0.4)' } } } }
   });
  
@@ -910,6 +891,8 @@ async function fetchAllData() {
         return;
       }
  
+      lastFetchTime = Date.now();
+      updateRefreshBadge();
       showToast(`Loaded ${readings.length} readings & ${loadOuts.length} load-outs`);
       renderAll();
     }
@@ -918,6 +901,24 @@ async function fetchAllData() {
     loadingEl.innerHTML = '<div style="text-align:center;padding:40px;color:#f87171;grid-column:1/-1"><div style="font-size:18px;font-weight:600">Failed to load data</div><div style="font-size:12px;margin-top:8px">Check your connection and refresh</div></div>';
   }
 }
+ 
+// ═══════════════════════════════════════════
+// LAST UPDATED COUNTER
+// ═══════════════════════════════════════════
+let lastFetchTime = null;
+ 
+function updateRefreshBadge() {
+  const el = document.getElementById('refresh-badge');
+  if (!el) return;
+  if (!lastFetchTime) { el.textContent = 'Refreshing...'; return; }
+  const mins = Math.floor((Date.now() - lastFetchTime) / 60000);
+  if (mins < 1) el.textContent = 'Updated just now';
+  else if (mins === 1) el.textContent = 'Updated 1 min ago';
+  else el.textContent = `Updated ${mins} min ago`;
+}
+ 
+// Update the badge every 30 seconds
+setInterval(updateRefreshBadge, 30000);
  
 // Init
 document.getElementById('loadout-time').value = new Date().toISOString().slice(0,16);
