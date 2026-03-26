@@ -245,7 +245,7 @@
         <th>Total</th>
         <th>Delta</th>
         <th>Load-Outs</th>
-        <th>Net Change Rate</th>
+        <th>Flow Rate</th>
         <th>Feed Tank</th>
         <th>Centrifuge</th>
       </tr>
@@ -597,6 +597,10 @@ function switchFacility(f) {
  
 function renderStatusCards() {
   const d = rawData[currentFacility];
+  if (!d || d.length === 0) {
+    document.getElementById('status-cards').innerHTML = '<div style="text-align:center;padding:40px;color:#fbbf24;grid-column:1/-1"><div style="font-size:18px;font-weight:600">No data for ' + currentFacility + '</div><div style="font-size:12px;margin-top:8px">Waiting for readings</div></div>';
+    return;
+  }
   const cap = HOPPER_MAX[currentFacility];
   const maxCombined = cap.h1 + cap.h2;
   const rates = computeFlowRates(currentFacility);
@@ -652,7 +656,7 @@ function renderStatusCards() {
       <div class="subtext">${arrow(Math.round((latest.feedTank - prev.feedTank)*10)/10)} vs prior</div>
     </div>
     <div class="status-card flow-rate">
-      <div class="label">Net Change Rate</div>
+      <div class="label">Flow Rate</div>
       <div class="value">${latestRate !== null ? (latestRate >= 0 ? '+' : '') + latestRate.toLocaleString() : '—'}<span class="unit">lbs/hr</span></div>
       <div class="subtext">${latest.feeding ? 'Centrifuge ON' : 'Centrifuge OFF'}</div>
     </div>
@@ -674,6 +678,7 @@ function renderStatusCards() {
  
 function renderGauges() {
   const d = rawData[currentFacility];
+  if (!d || d.length === 0) { document.getElementById('hopper-gauges').innerHTML = ''; return; }
   const cap = HOPPER_MAX[currentFacility];
   const latest = d[d.length - 1];
   // Gauges show raw email data — no load-out adjustments
@@ -756,7 +761,7 @@ function renderCharts() {
   const rateLabels = labels.slice(1);
   flowRateChart = new Chart(document.getElementById('flowRateChart').getContext('2d'), {
     type: 'bar',
-    data: { labels: rateLabels, datasets: [{ label: 'Net Change Rate', data: rateData, backgroundColor: rateData.map(v => v >= 0 ? 'rgba(16,185,129,0.6)' : 'rgba(248,113,113,0.5)'), borderColor: rateData.map(v => v >= 0 ? '#10b981' : '#f87171'), borderWidth: 1.5, borderRadius: 4 }] },
+    data: { labels: rateLabels, datasets: [{ label: 'Flow Rate', data: rateData, backgroundColor: rateData.map(v => v >= 0 ? 'rgba(16,185,129,0.6)' : 'rgba(248,113,113,0.5)'), borderColor: rateData.map(v => v >= 0 ? '#10b981' : '#f87171'), borderWidth: 1.5, borderRadius: 4 }] },
     options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.parsed.y >= 0 ? '+' : ''}${ctx.parsed.y.toLocaleString()} lbs/hr` } } }, scales: { x: { ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 45 }, grid: { color: 'rgba(51,65,85,0.4)' } }, y: { ticks: { color: '#64748b', callback: v => (v/1000)+'k' }, grid: { color: 'rgba(51,65,85,0.4)' } } } }
   });
  
