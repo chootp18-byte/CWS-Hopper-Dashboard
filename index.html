@@ -30,11 +30,12 @@
   .tab.active-rc { background: linear-gradient(135deg, #06b6d4, #0891b2); color: white; border-color: #06b6d4; box-shadow: 0 4px 15px rgba(6,182,212,0.3); }
   .tab:hover:not(.active-dm):not(.active-rc) { background: #334155; color: #e2e8f0; }
  
-  .status-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 24px; }
+  .status-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
   .status-card { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 18px; position: relative; overflow: hidden; }
   .status-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
   .status-card.hopper1::before { background: #3b82f6; }
   .status-card.hopper2::before { background: #8b5cf6; }
+  .status-card.total-hopper::before { background: linear-gradient(90deg, #3b82f6, #8b5cf6); }
   .status-card.feed-tank::before { background: #06b6d4; }
   .status-card.flow-rate::before { background: #f59e0b; }
   .status-card.loads-out::before { background: #ef4444; }
@@ -43,6 +44,7 @@
   .status-card .unit { font-size: 12px; font-weight: 400; color: #94a3b8; margin-left: 3px; }
   .status-card.hopper1 .value { color: #60a5fa; }
   .status-card.hopper2 .value { color: #a78bfa; }
+  .status-card.total-hopper .value { color: #10b981; }
   .status-card.feed-tank .value { color: #22d3ee; }
   .status-card.flow-rate .value { color: #fbbf24; }
   .status-card.loads-out .value { color: #f87171; }
@@ -174,14 +176,14 @@
 <div class="loadout-section">
   <div class="loadout-form-panel">
     <h3>Log a Load-Out</h3>
-    <div class="form-desc">Upload a ticket photo or enter manually. Adjusts calculated flow rates automatically.</div>
+    <div class="form-desc">Upload a ticket photo or enter manually. Load-outs are subtracted from the combined total and factored into flow rate calculations.</div>
  
     <!-- Ticket Scanner -->
     <div class="scan-zone" id="scan-zone">
       <input type="file" id="ticket-file" accept="image/*" onchange="handleTicketUpload(event)">
       <div class="scan-icon">&#128247;</div>
       <div class="scan-text">Drop a ticket photo here or tap to upload</div>
-      <div class="scan-sub">Supports JPG, PNG &mdash; we'll scan it for weight, hopper &amp; truck info</div>
+      <div class="scan-sub">Supports JPG, PNG &mdash; we'll scan it for net weight &amp; truck info</div>
     </div>
     <div class="scan-preview" id="scan-preview">
       <img id="scan-img" src="" alt="Ticket preview">
@@ -203,27 +205,18 @@
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label>Hopper</label>
-        <select id="loadout-hopper">
-          <option value="1">Hopper 1</option>
-          <option value="2">Hopper 2</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Weight Removed (LBS)</label>
+        <label>Net Weight Removed (LBS)</label>
         <input type="number" id="loadout-weight" placeholder="e.g. 45000" min="0" step="100">
         <span class="autofill-hint" id="weight-hint" style="display:none"></span>
       </div>
-    </div>
-    <div class="form-row">
       <div class="form-group">
         <label>Truck / Driver (optional)</label>
         <input type="text" id="loadout-truck" placeholder="e.g. Truck #42">
       </div>
-      <div class="form-group">
-        <label>Notes (optional)</label>
-        <input type="text" id="loadout-notes" placeholder="e.g. Wet material">
-      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Notes (optional)</label>
+      <input type="text" id="loadout-notes" placeholder="e.g. Wet material">
     </div>
     <button class="add-load-btn" onclick="addLoadOut()">+ Add Load-Out</button>
   </div>
@@ -352,7 +345,6 @@ async function loadFromSheets() {
         sheetId: r.ID,
         time: new Date(r.Timestamp),
         facility: r.Facility,
-        hopper: parseInt(r.Hopper) || 1,
         weight: parseFloat(r.Weight_LBS) || 0,
         notes: [r.Truck, r.Notes].filter(Boolean).join(' — ')
       }));
@@ -368,7 +360,6 @@ async function loadFromSheets() {
 async function addLoadOut() {
   const timeInput = document.getElementById('loadout-time').value;
   const facility = document.getElementById('loadout-facility').value;
-  const hopper = document.getElementById('loadout-hopper').value;
   const weight = parseFloat(document.getElementById('loadout-weight').value);
   const truck = document.getElementById('loadout-truck').value;
   const notes = document.getElementById('loadout-notes').value;
@@ -380,7 +371,7 @@ async function addLoadOut() {
  
   const combined = [truck, notes].filter(Boolean).join(' — ');
   const localId = ++loadOutId;
-  loadOuts.push({ id: localId, time: new Date(timeInput), facility, hopper: parseInt(hopper), weight, notes: combined });
+  loadOuts.push({ id: localId, time: new Date(timeInput), facility, weight, notes: combined });
  
   document.getElementById('loadout-weight').value = '';
   document.getElementById('loadout-truck').value = '';
@@ -401,7 +392,7 @@ async function addLoadOut() {
         action: 'add',
         timestamp: new Date(timeInput).toISOString(),
         facility: facility,
-        hopper: hopper,
+        hopper: 'combined',
         weight: weight,
         truck: truck || '',
         notes: notes || ''
@@ -440,6 +431,10 @@ async function removeLoadOut(id) {
  
 function getTotalLoadOutBetween(facility, t1, t2) {
   return loadOuts.filter(l => l.facility === facility && l.time >= t1 && l.time <= t2).reduce((s, l) => s + l.weight, 0);
+}
+ 
+function getTotalLoadOutAfter(facility, t) {
+  return loadOuts.filter(l => l.facility === facility && l.time >= t).reduce((s, l) => s + l.weight, 0);
 }
  
 // ═══════════════════════════════════════════
@@ -482,23 +477,19 @@ async function handleTicketUpload(event) {
  
     if (parsed.weight) {
       status.className = 'scan-status scan-done';
-      let msg = `Found: ${parsed.weight.toLocaleString()} LBS`;
+      let msg = `Found net weight: ${parsed.weight.toLocaleString()} LBS`;
       if (parsed.truck) msg += ` | Truck: ${parsed.truck}`;
-      if (parsed.hopper) msg += ` | Hopper ${parsed.hopper}`;
       status.textContent = msg + ' — Review below and confirm.';
  
       // Auto-fill form
-      if (parsed.weight) {
-        document.getElementById('loadout-weight').value = parsed.weight;
-        document.getElementById('weight-hint').textContent = 'Auto-filled from ticket scan';
-        document.getElementById('weight-hint').style.display = 'block';
-      }
-      if (parsed.hopper) document.getElementById('loadout-hopper').value = parsed.hopper;
+      document.getElementById('loadout-weight').value = parsed.weight;
+      document.getElementById('weight-hint').textContent = 'Auto-filled from ticket scan (net weight)';
+      document.getElementById('weight-hint').style.display = 'block';
       if (parsed.truck) document.getElementById('loadout-truck').value = parsed.truck;
       if (parsed.date) document.getElementById('loadout-time').value = parsed.date;
     } else {
       status.className = 'scan-status scan-fail';
-      status.textContent = 'Could not find weight on ticket. Please enter manually below.';
+      status.textContent = 'Could not find net weight on ticket. Please enter manually below.';
     }
   } catch (err) {
     console.error('OCR error:', err);
@@ -511,38 +502,64 @@ async function handleTicketUpload(event) {
 }
  
 function parseTicketText(text) {
-  const result = { weight: null, truck: null, hopper: null, date: null };
+  const result = { weight: null, truck: null, date: null };
   const lines = text.toUpperCase();
  
-  // Extract weight — look for common patterns on load tickets
-  // Patterns: "NET: 45,000", "NET WT 45000", "NET WEIGHT: 45000 LBS", "GROSS - TARE = NET", plain large numbers
-  const weightPatterns = [
+  // Try to find GROSS, TARE, and NET to calculate net weight properly
+  let gross = null, tare = null, net = null;
+ 
+  // Look for explicit NET weight first (most reliable)
+  const netPatterns = [
     /NET\s*(?:WT|WEIGHT|WGT)?\s*[:\-=]?\s*[\$]?\s*([\d,]+(?:\.\d+)?)\s*(?:LBS?|POUNDS?|#)?/i,
-    /(?:LOAD|TOTAL)\s*(?:WT|WEIGHT|WGT)?\s*[:\-=]?\s*([\d,]+(?:\.\d+)?)\s*(?:LBS?|POUNDS?|#)?/i,
-    /([\d,]{4,7})\s*(?:LBS?|POUNDS?|#)/i,
-    /(?:NET|LOAD)\s*[:\s]*([\d,]{4,7})/i,
   ];
-  for (const pat of weightPatterns) {
+  for (const pat of netPatterns) {
     const m = text.match(pat);
     if (m) {
       const w = parseFloat(m[1].replace(/,/g, ''));
-      if (w >= 1000 && w <= 200000) { result.weight = w; break; }
+      if (w >= 1000 && w <= 200000) { net = w; break; }
     }
   }
-  // Fallback: find the largest number that looks like a weight
-  if (!result.weight) {
+ 
+  // Look for GROSS and TARE to verify or calculate net
+  const grossMatch = text.match(/GROSS\s*(?:WT|WEIGHT|WGT)?\s*[:\-=]?\s*([\d,]+(?:\.\d+)?)/i);
+  const tareMatch = text.match(/TARE\s*(?:WT|WEIGHT|WGT)?\s*[:\-=]?\s*([\d,]+(?:\.\d+)?)/i);
+  if (grossMatch) gross = parseFloat(grossMatch[1].replace(/,/g, ''));
+  if (tareMatch) tare = parseFloat(tareMatch[1].replace(/,/g, ''));
+ 
+  // If we have gross and tare but no net, calculate it
+  if (gross && tare && !net) {
+    const calculated = gross - tare;
+    if (calculated >= 1000 && calculated <= 200000) net = calculated;
+  }
+ 
+  // If we still don't have net, try other patterns
+  if (!net) {
+    const fallbackPatterns = [
+      /(?:LOAD|TOTAL)\s*(?:WT|WEIGHT|WGT)?\s*[:\-=]?\s*([\d,]+(?:\.\d+)?)\s*(?:LBS?|POUNDS?|#)?/i,
+      /([\d,]{4,7})\s*(?:LBS?|POUNDS?|#)/i,
+      /(?:NET|LOAD)\s*[:\s]*([\d,]{4,7})/i,
+    ];
+    for (const pat of fallbackPatterns) {
+      const m = text.match(pat);
+      if (m) {
+        const w = parseFloat(m[1].replace(/,/g, ''));
+        if (w >= 1000 && w <= 200000) { net = w; break; }
+      }
+    }
+  }
+ 
+  // Last resort: find the largest plausible number
+  if (!net) {
     const allNums = [...text.matchAll(/([\d,]{4,7})/g)].map(m => parseFloat(m[1].replace(/,/g, '')));
     const plausible = allNums.filter(n => n >= 5000 && n <= 200000);
-    if (plausible.length) result.weight = Math.max(...plausible);
+    if (plausible.length) net = Math.max(...plausible);
   }
+ 
+  result.weight = net;
  
   // Extract truck number
   const truckMatch = text.match(/(?:TRUCK|TRK|VEHICLE|VEH|UNIT)\s*[#:\-]?\s*([A-Z0-9\-]+)/i);
   if (truckMatch) result.truck = truckMatch[1].trim();
- 
-  // Extract hopper
-  const hopperMatch = text.match(/HOPPER\s*[#:\-]?\s*([12])/i);
-  if (hopperMatch) result.hopper = hopperMatch[1];
  
   // Extract date
   const dateMatch = text.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\s*(\d{1,2}):(\d{2})/);
@@ -570,7 +587,7 @@ scanZone.addEventListener('drop', e => {
 });
  
 // ═══════════════════════════════════════════
-// CALCULATED FLOW RATE
+// CALCULATED FLOW RATE (combined total)
 // ═══════════════════════════════════════════
 function computeFlowRates(facility) {
   const d = rawData[facility];
@@ -587,41 +604,36 @@ function computeFlowRates(facility) {
 }
  
 // ═══════════════════════════════════════════
-// HOURS UNTIL FULL ESTIMATE
+// HOURS UNTIL FULL ESTIMATE (combined)
 // ═══════════════════════════════════════════
 function estimateHoursUntilFull(facility) {
   const d = rawData[facility];
   const cap = HOPPER_MAX[facility];
-  if (d.length < 3) return { h1: null, h2: null };
+  const maxCombined = cap.h1 + cap.h2;
+  if (d.length < 3) return { combined: null, combinedRate: null };
  
-  // Use the last 3 readings to compute an average fill rate per hour for each hopper
+  // Use the last 3 readings to compute average combined fill rate per hour
   const recent = d.slice(-3);
-  let h1Rate = 0, h2Rate = 0, totalHours = 0;
+  let combinedRate = 0;
   for (let i = 1; i < recent.length; i++) {
     const hrs = (recent[i].ts - recent[i-1].ts) / (1000 * 60 * 60);
     if (hrs > 0) {
-      // Account for load-outs in this interval
-      const lo = loadOuts.filter(l => l.facility === facility && l.time >= recent[i-1].ts && l.time <= recent[i].ts);
-      const loH1 = lo.filter(l => l.hopper === 1).reduce((s,l) => s + l.weight, 0);
-      const loH2 = lo.filter(l => l.hopper === 2).reduce((s,l) => s + l.weight, 0);
-      h1Rate += ((recent[i].h1 - recent[i-1].h1) + loH1) / hrs;
-      h2Rate += ((recent[i].h2 - recent[i-1].h2) + loH2) / hrs;
-      totalHours += hrs;
+      const total1 = recent[i-1].h1 + recent[i-1].h2;
+      const total2 = recent[i].h1 + recent[i].h2;
+      const lo = getTotalLoadOutBetween(facility, recent[i-1].ts, recent[i].ts);
+      combinedRate += ((total2 - total1) + lo) / hrs;
     }
   }
   const intervals = recent.length - 1;
-  h1Rate = h1Rate / intervals;
-  h2Rate = h2Rate / intervals;
+  combinedRate = combinedRate / intervals;
  
   const latest = d[d.length - 1];
-  const h1Remaining = cap.h1 - latest.h1;
-  const h2Remaining = cap.h2 - latest.h2;
+  const currentTotal = latest.h1 + latest.h2;
+  const remaining = maxCombined - currentTotal;
  
   return {
-    h1: h1Rate > 50 ? Math.round((h1Remaining / h1Rate) * 10) / 10 : null,  // only show if filling at >50 lbs/hr
-    h2: h2Rate > 50 ? Math.round((h2Remaining / h2Rate) * 10) / 10 : null,
-    h1Rate: Math.round(h1Rate),
-    h2Rate: Math.round(h2Rate)
+    combined: combinedRate > 50 ? Math.round((remaining / combinedRate) * 10) / 10 : null,
+    combinedRate: Math.round(combinedRate)
   };
 }
  
@@ -650,21 +662,28 @@ function switchFacility(f) {
 function renderStatusCards() {
   const d = rawData[currentFacility];
   const cap = HOPPER_MAX[currentFacility];
+  const maxCombined = cap.h1 + cap.h2;
   const rates = computeFlowRates(currentFacility);
   const latest = d[d.length - 1];
   const prev = d.length > 1 ? d[d.length - 2] : latest;
   const latestRate = rates[rates.length - 1];
   const totalLO = loadOuts.filter(l => l.facility === currentFacility).reduce((s, l) => s + l.weight, 0);
   const loCount = loadOuts.filter(l => l.facility === currentFacility).length;
-  // Subtract load-outs logged after the latest reading for real-time visual update
-  const recentLO = loadOuts.filter(l => l.facility === currentFacility && l.time >= latest.ts);
-  const loH1 = recentLO.filter(l => l.hopper === 1).reduce((s, l) => s + l.weight, 0);
-  const loH2 = recentLO.filter(l => l.hopper === 2).reduce((s, l) => s + l.weight, 0);
-  const adjH1 = Math.max(0, latest.h1 - loH1);
-  const adjH2 = Math.max(0, latest.h2 - loH2);
-  const pct1 = Math.round((adjH1 / cap.h1) * 100);
-  const pct2 = Math.round((adjH2 / cap.h2) * 100);
+ 
+  // Per-hopper percentages (raw from email, no load-out adjustments)
+  const pct1 = Math.round((latest.h1 / cap.h1) * 100);
+  const pct2 = Math.round((latest.h2 / cap.h2) * 100);
+ 
+  // Combined total with load-out subtraction
+  const currentTotal = latest.h1 + latest.h2;
+  const prevTotal = prev.h1 + prev.h2;
+  const recentLO = getTotalLoadOutAfter(currentFacility, latest.ts);
+  const adjTotal = Math.max(0, currentTotal - recentLO);
+  const pctTotal = Math.round((adjTotal / maxCombined) * 100);
+ 
+  // Hours until full (combined)
   const ttf = estimateHoursUntilFull(currentFacility);
+  const ttfColor = ttf.combined !== null && ttf.combined > 0 ? (ttf.combined <= 6 ? '#f87171' : ttf.combined <= 12 ? '#fbbf24' : '#34d399') : '#64748b';
  
   function arrow(val) {
     if (val > 0) return `<span style="color:#34d399">&#9650; +${val.toLocaleString()}</span>`;
@@ -672,24 +691,24 @@ function renderStatusCards() {
     return `<span style="color:#64748b">&#8212; 0</span>`;
   }
  
-  function ttfBadge(hours) {
-    if (hours === null || hours <= 0) return '';
-    const color = hours <= 6 ? '#f87171' : hours <= 12 ? '#fbbf24' : '#34d399';
-    return ` <span style="color:${color};font-size:10px;font-weight:600">&#9202; ${formatTimeToFull(hours)} to full</span>`;
-  }
- 
   document.getElementById('status-cards').innerHTML = `
     <div class="status-card hopper1">
       <div class="label">Hopper 1</div>
-      <div class="value">${adjH1.toLocaleString()}<span class="unit">LBS</span></div>
-      <div class="subtext">${arrow(latest.h1 - prev.h1)} vs prior &middot; ${pct1}% of max${loH1 > 0 ? ' <span style="color:#fbbf24;font-size:10px">(-' + loH1.toLocaleString() + ' loaded out)</span>' : ''}</div>
+      <div class="value">${latest.h1.toLocaleString()}<span class="unit">LBS</span></div>
+      <div class="subtext">${arrow(latest.h1 - prev.h1)} vs prior &middot; ${pct1}% of max</div>
       <div class="cap-bar"><div class="cap-fill" style="width:${Math.min(pct1,100)}%;background:${pct1>90?'#f87171':'#3b82f6'}"></div></div>
     </div>
     <div class="status-card hopper2">
       <div class="label">Hopper 2</div>
-      <div class="value">${adjH2.toLocaleString()}<span class="unit">LBS</span></div>
-      <div class="subtext">${arrow(latest.h2 - prev.h2)} vs prior &middot; ${pct2}% of max${loH2 > 0 ? ' <span style="color:#fbbf24;font-size:10px">(-' + loH2.toLocaleString() + ' loaded out)</span>' : ''}</div>
+      <div class="value">${latest.h2.toLocaleString()}<span class="unit">LBS</span></div>
+      <div class="subtext">${arrow(latest.h2 - prev.h2)} vs prior &middot; ${pct2}% of max</div>
       <div class="cap-bar"><div class="cap-fill" style="width:${Math.min(pct2,100)}%;background:${pct2>90?'#f87171':'#8b5cf6'}"></div></div>
+    </div>
+    <div class="status-card total-hopper">
+      <div class="label">Total Hopper Weight</div>
+      <div class="value">${adjTotal.toLocaleString()}<span class="unit">LBS</span></div>
+      <div class="subtext">${arrow(currentTotal - prevTotal)} vs prior &middot; ${pctTotal}% of max (${maxCombined.toLocaleString()})${recentLO > 0 ? ' <span style="color:#fbbf24;font-size:10px">(-' + recentLO.toLocaleString() + ' loaded out)</span>' : ''}</div>
+      <div class="cap-bar"><div class="cap-fill" style="width:${Math.min(pctTotal,100)}%;background:${pctTotal>90?'#f87171':'#10b981'}"></div></div>
     </div>
     <div class="status-card feed-tank">
       <div class="label">Feed Tank Level</div>
@@ -701,20 +720,12 @@ function renderStatusCards() {
       <div class="value">${latestRate !== null ? (latestRate >= 0 ? '+' : '') + latestRate.toLocaleString() : '—'}<span class="unit">lbs/hr</span></div>
       <div class="subtext">${latest.feeding ? 'Centrifuge ON' : 'Centrifuge OFF'}</div>
     </div>
-    <div class="status-card" style="border-left:3px solid ${ttf.h1 !== null && ttf.h1 <= 6 || ttf.h2 !== null && ttf.h2 <= 6 ? '#f87171' : ttf.h1 !== null && ttf.h1 <= 12 || ttf.h2 !== null && ttf.h2 <= 12 ? '#fbbf24' : '#34d399'}">
-      <div class="label">Hours Until Full</div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:4px">
-        <div>
-          <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px">H1</div>
-          <div style="font-size:22px;font-weight:800;color:${ttf.h1 !== null && ttf.h1 > 0 ? (ttf.h1 <= 6 ? '#f87171' : ttf.h1 <= 12 ? '#fbbf24' : '#34d399') : '#64748b'}">${ttf.h1 !== null && ttf.h1 > 0 ? formatTimeToFull(ttf.h1) : 'N/A'}</div>
-          <div style="font-size:9px;color:#64748b">${ttf.h1Rate ? '~' + Math.abs(ttf.h1Rate).toLocaleString() + ' lbs/hr' : ''}</div>
-        </div>
-        <div style="width:1px;height:36px;background:#334155"></div>
-        <div>
-          <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px">H2</div>
-          <div style="font-size:22px;font-weight:800;color:${ttf.h2 !== null && ttf.h2 > 0 ? (ttf.h2 <= 6 ? '#f87171' : ttf.h2 <= 12 ? '#fbbf24' : '#34d399') : '#64748b'}">${ttf.h2 !== null && ttf.h2 > 0 ? formatTimeToFull(ttf.h2) : 'N/A'}</div>
-          <div style="font-size:9px;color:#64748b">${ttf.h2Rate ? '~' + Math.abs(ttf.h2Rate).toLocaleString() + ' lbs/hr' : ''}</div>
-        </div>
+    <div class="status-card" style="border-left:3px solid ${ttfColor}">
+      <div class="label">Time Until Full</div>
+      <div style="margin-top:4px">
+        <div style="font-size:26px;font-weight:800;color:${ttfColor}">${ttf.combined !== null && ttf.combined > 0 ? formatTimeToFull(ttf.combined) : 'N/A'}</div>
+        <div style="font-size:10px;color:#64748b;margin-top:2px">${ttf.combinedRate ? 'Combined fill rate: ~' + Math.abs(ttf.combinedRate).toLocaleString() + ' lbs/hr' : 'Not enough data'}</div>
+        <div style="font-size:9px;color:#475569;margin-top:1px">Based on both hoppers combined</div>
       </div>
     </div>
     <div class="status-card loads-out">
@@ -729,22 +740,10 @@ function renderGauges() {
   const d = rawData[currentFacility];
   const cap = HOPPER_MAX[currentFacility];
   const latest = d[d.length - 1];
-  // Adjust for load-outs after last reading
-  const recentLOG = loadOuts.filter(l => l.facility === currentFacility && l.time >= latest.ts);
-  const gLoH1 = recentLOG.filter(l => l.hopper === 1).reduce((s, l) => s + l.weight, 0);
-  const gLoH2 = recentLOG.filter(l => l.hopper === 2).reduce((s, l) => s + l.weight, 0);
-  const gAdjH1 = Math.max(0, latest.h1 - gLoH1);
-  const gAdjH2 = Math.max(0, latest.h2 - gLoH2);
-  const pct1 = Math.min((gAdjH1 / cap.h1) * 100, 100);
-  const pct2 = Math.min((gAdjH2 / cap.h2) * 100, 100);
+  // Gauges show raw email data — no load-out adjustments
+  const pct1 = Math.min((latest.h1 / cap.h1) * 100, 100);
+  const pct2 = Math.min((latest.h2 / cap.h2) * 100, 100);
   const name = currentFacility === 'DM' ? 'Durham' : 'Rock Creek';
-  const ttf = estimateHoursUntilFull(currentFacility);
- 
-  function ttfGaugeLabel(hours, rate) {
-    if (hours === null || hours <= 0) return '<span style="color:#64748b;font-size:10px">Declining / steady</span>';
-    const color = hours <= 6 ? '#f87171' : hours <= 12 ? '#fbbf24' : '#34d399';
-    return `<span style="color:${color};font-size:11px;font-weight:700">&#9202; ${formatTimeToFull(hours)}</span><br><span style="color:#64748b;font-size:9px">~${Math.abs(rate).toLocaleString()} lbs/hr fill rate</span>`;
-  }
  
   document.getElementById('hopper-gauges').innerHTML = `
     <div class="panel gauge-panel">
@@ -756,9 +755,8 @@ function renderGauges() {
             <div class="hopper-bar-fill h1" style="height:${pct1}%"></div>
           </div>
           <div class="hopper-bar-pct h1">${pct1.toFixed(0)}%</div>
-          <div class="hopper-bar-lbs">${gAdjH1.toLocaleString()} LBS</div>
+          <div class="hopper-bar-lbs">${latest.h1.toLocaleString()} LBS</div>
           <div class="hopper-bar-max">of ${cap.h1.toLocaleString()}</div>
-          <div style="margin-top:6px">${ttfGaugeLabel(ttf.h1, ttf.h1Rate)}</div>
         </div>
         <div class="hopper-container">
           <div class="hopper-label">Hopper 2</div>
@@ -766,9 +764,8 @@ function renderGauges() {
             <div class="hopper-bar-fill h2" style="height:${pct2}%"></div>
           </div>
           <div class="hopper-bar-pct h2">${pct2.toFixed(0)}%</div>
-          <div class="hopper-bar-lbs">${gAdjH2.toLocaleString()} LBS</div>
+          <div class="hopper-bar-lbs">${latest.h2.toLocaleString()} LBS</div>
           <div class="hopper-bar-max">of ${cap.h2.toLocaleString()}</div>
-          <div style="margin-top:6px">${ttfGaugeLabel(ttf.h2, ttf.h2Rate)}</div>
         </div>
       </div>
     </div>
@@ -795,7 +792,7 @@ function renderLoadOutLog() {
   const logs = loadOuts.filter(l => l.facility === currentFacility).sort((a,b) => b.time - a.time);
   const el = document.getElementById('loadout-log');
   if (!logs.length) { el.innerHTML = '<div class="empty-log">No load-outs logged yet.<br>Upload a ticket photo or enter manually.</div>'; return; }
-  el.innerHTML = `<table><thead><tr><th>Time</th><th>Hopper</th><th>Weight</th><th>Notes</th><th></th></tr></thead><tbody>${logs.map(l => `<tr><td>${l.time.toLocaleString('en-US',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'})}</td><td>H${l.hopper}</td><td style="color:#fbbf24;font-weight:600">-${l.weight.toLocaleString()} LBS</td><td>${l.notes||'—'}</td><td><button class="delete-btn" onclick="removeLoadOut(${l.id})">&times;</button></td></tr>`).join('')}</tbody></table>`;
+  el.innerHTML = `<table><thead><tr><th>Time</th><th>Weight</th><th>Notes</th><th></th></tr></thead><tbody>${logs.map(l => `<tr><td>${l.time.toLocaleString('en-US',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'})}</td><td style="color:#fbbf24;font-weight:600">-${l.weight.toLocaleString()} LBS</td><td>${l.notes||'—'}</td><td><button class="delete-btn" onclick="removeLoadOut(${l.id})">&times;</button></td></tr>`).join('')}</tbody></table>`;
 }
  
 function renderCharts() {
@@ -879,7 +876,8 @@ function copyLink() {
 function emailDashboard() {
   const d = rawData[currentFacility]; const latest = d[d.length-1]; const rates = computeFlowRates(currentFacility);
   const cap = HOPPER_MAX[currentFacility]; const name = currentFacility === 'DM' ? 'Durham' : 'Rock Creek';
-  const text = `CWS Solids — ${name} (${latest.time})\nH1: ${latest.h1.toLocaleString()} / ${cap.h1.toLocaleString()} LBS (${Math.round(latest.h1/cap.h1*100)}%)\nH2: ${latest.h2.toLocaleString()} / ${cap.h2.toLocaleString()} LBS (${Math.round(latest.h2/cap.h2*100)}%)\nFeed Tank: ${latest.feedTank} Ft\nCentrifuge: ${latest.feeding?'Feeding':'Off'}\nCalc. Flow: ${rates[rates.length-1]?.toLocaleString()||'N/A'} lbs/hr\nLoads Out: ${loadOuts.filter(l=>l.facility===currentFacility).length}`;
+  const total = latest.h1 + latest.h2; const maxT = cap.h1 + cap.h2;
+  const text = `CWS Solids — ${name} (${latest.time})\nH1: ${latest.h1.toLocaleString()} / ${cap.h1.toLocaleString()} LBS (${Math.round(latest.h1/cap.h1*100)}%)\nH2: ${latest.h2.toLocaleString()} / ${cap.h2.toLocaleString()} LBS (${Math.round(latest.h2/cap.h2*100)}%)\nTotal: ${total.toLocaleString()} / ${maxT.toLocaleString()} LBS (${Math.round(total/maxT*100)}%)\nFeed Tank: ${latest.feedTank} Ft\nCentrifuge: ${latest.feeding?'Feeding':'Off'}\nCalc. Flow: ${rates[rates.length-1]?.toLocaleString()||'N/A'} lbs/hr\nLoads Out: ${loadOuts.filter(l=>l.facility===currentFacility).length}`;
   navigator.clipboard.writeText(text).then(() => { showToast('Summary copied!'); closeShareModal(); });
 }
  
@@ -899,7 +897,7 @@ function exportCSV() {
     csv += `${r.time},${r.h1},${cap.h1},${Math.round(r.h1/cap.h1*100)}%,${r.h2},${cap.h2},${Math.round(r.h2/cap.h2*100)}%,${t},${dl},${lo},${rates[i]??''},${r.feedTank},${r.feeding?'Feeding':'Off'}\n`;
   });
   const logs = loadOuts.filter(l=>l.facility===f);
-  if (logs.length) { csv += '\nLOAD-OUTS\nTime,Hopper,Weight,Notes\n'; logs.forEach(l => csv += `${l.time.toLocaleString()},H${l.hopper},${l.weight},${l.notes||''}\n`); }
+  if (logs.length) { csv += '\nLOAD-OUTS\nTime,Weight,Notes\n'; logs.forEach(l => csv += `${l.time.toLocaleString()},${l.weight},${l.notes||''}\n`); }
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
   a.download = `cws-${f.toLowerCase()}-data.csv`; a.click(); showToast('CSV exported!');
 }
