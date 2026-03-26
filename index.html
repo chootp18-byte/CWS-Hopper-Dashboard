@@ -123,6 +123,17 @@
   .negative { color: #f87171; }
   .load-marker { color: #fbbf24; font-weight: 600; }
  
+  .shutdown-panel { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 24px; margin-bottom: 20px; position: relative; overflow: hidden; }
+  .shutdown-panel::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #f59e0b, #ef4444); }
+  .shutdown-panel h3 { font-size: 15px; font-weight: 700; margin-bottom: 4px; color: #e2e8f0; }
+  .shutdown-panel .panel-desc { font-size: 12px; color: #64748b; margin-bottom: 16px; }
+  .shutdown-log { max-height: 400px; overflow-y: auto; }
+  .shutdown-log table { width: 100%; font-size: 12px; }
+  .shutdown-log th { text-align: left; padding: 8px 10px; font-weight: 600; color: #94a3b8; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #334155; position: sticky; top: 0; background: #1e293b; }
+  .shutdown-log td { padding: 8px 10px; border-bottom: 1px solid rgba(51,65,85,0.3); color: #cbd5e1; }
+  .event-started { color: #34d399; font-weight: 600; }
+  .event-stopped { color: #f87171; font-weight: 600; }
+ 
   .footer { text-align: center; padding: 16px; font-size: 11px; color: #475569; }
  
   .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center; }
@@ -225,11 +236,7 @@
   </div>
 </div>
 <div class="charts-grid">
-  <div class="panel">
-    <div class="chart-title">Calculated Net Flow Rate <span class="accent">(lbs/hr, adjusted for load-outs)</span></div>
-    <canvas id="flowRateChart" height="110"></canvas>
-  </div>
-  <div class="panel">
+  <div class="panel full-grid">
     <div class="chart-title">Feed Tank Level <span class="accent">(Ft)</span></div>
     <canvas id="feedTankChart" height="110"></canvas>
   </div>
@@ -254,6 +261,15 @@
     </thead>
     <tbody id="table-body"></tbody>
   </table>
+</div>
+ 
+<!-- Centrifuge Events Log -->
+<div class="shutdown-panel">
+  <h3>Centrifuge Events &mdash; Last 10</h3>
+  <div class="panel-desc">Tracks when the centrifuge starts or stops feeding at each facility.</div>
+  <div class="shutdown-log" id="shutdown-log">
+    <div style="text-align:center;padding:20px;color:#475569;font-size:13px">No centrifuge events logged yet.</div>
+  </div>
 </div>
  
 <div class="footer">Data sourced from CWS Solids automated reports (svcSolids@cleanwaterservices.org) &mdash; Live data from Google Sheets &middot; Auto-refreshes every 5 min</div>
@@ -281,9 +297,10 @@ const rawData = { DM: [], RC: [] };
 // ═══════════════════════════════════════════
 // LOAD-OUT TRACKING (Google Sheets backed)
 // ═══════════════════════════════════════════
-const SHEETS_API = 'https://script.google.com/macros/s/AKfycbzC0AV8mU5drZr7L4rjdFyYObbjDRtR8qNOSjq7WILo-hNubYQuy5Dsb1o_hvoFHZ9JbA/exec';
+const SHEETS_API = 'https://script.google.com/macros/s/AKfycbygx7BIZvIxNYLuSS5KsmIzeYX37ay728m-Xn7AF6MINAbQYyp6gHONAuoYjuMjkbQKsQ/exec';
 let loadOuts = [];
 let loadOutId = 0;
+let shutdowns = [];
  
 // Load-outs are now loaded by fetchAllData() on startup
 // This function kept for backward compatibility
@@ -571,8 +588,17 @@ function estimateHoursUntilFull(facility) {
   const currentTotal = (latest.h1 || 0) + (latest.h2 || 0);
   const remaining = maxCombined - currentTotal;
  
+  // If rate is negative, hoppers are emptying — return negative to indicate declining
+  // If rate is positive and > 50, calculate hours until full
+  let hoursUntilFull = null;
+  if (combinedRate > 50) {
+    hoursUntilFull = Math.round((remaining / combinedRate) * 10) / 10;
+  } else if (combinedRate < -50) {
+    hoursUntilFull = -1; // Signal that hoppers are declining
+  }
+ 
   return {
-    combined: combinedRate > 50 ? Math.round((remaining / combinedRate) * 10) / 10 : null,
+    combined: hoursUntilFull,
     combinedRate: Math.round(combinedRate)
   };
 }
@@ -589,7 +615,7 @@ function formatTimeToFull(hours) {
 // RENDERING
 // ═══════════════════════════════════════════
 let currentFacility = 'DM';
-let hopperChart, feedTankChart, flowRateChart;
+let hopperChart, feedTankChart;
  
 function switchFacility(f) {
   currentFacility = f;
@@ -629,7 +655,7 @@ function renderStatusCards() {
  
   // Hours until full (combined)
   const ttf = estimateHoursUntilFull(currentFacility);
-  const ttfColor = ttf.combined !== null && ttf.combined > 0 ? (ttf.combined <= 6 ? '#f87171' : ttf.combined <= 12 ? '#fbbf24' : '#34d399') : '#64748b';
+  const ttfColor = ttf.combined !== null && ttf.combined > 0 ? (ttf.combined <= 6 ? '#f87171' : ttf.combined <= 12 ? '#fbbf24' : '#34d399') : ttf.combined === -1 ? '#34d399' : '#64748b';
  
   function arrow(val) {
     if (val > 0) return `<span style="color:#34d399">&#9650; +${val.toLocaleString()}</span>`;
@@ -669,8 +695,8 @@ function renderStatusCards() {
     <div class="status-card" style="border-left:3px solid ${ttfColor}">
       <div class="label">Time Until Full</div>
       <div style="margin-top:4px">
-        <div style="font-size:26px;font-weight:800;color:${ttfColor}">${ttf.combined !== null && ttf.combined > 0 ? formatTimeToFull(ttf.combined) : 'N/A'}</div>
-        <div style="font-size:10px;color:#64748b;margin-top:2px">${ttf.combinedRate ? 'Combined fill rate: ~' + Math.abs(ttf.combinedRate).toLocaleString() + ' lbs/hr' : 'Not enough data'}</div>
+        <div style="font-size:26px;font-weight:800;color:${ttfColor}">${ttf.combined === -1 ? 'Declining' : ttf.combined !== null && ttf.combined > 0 ? formatTimeToFull(ttf.combined) : 'N/A'}</div>
+        <div style="font-size:10px;color:#64748b;margin-top:2px">${ttf.combinedRate ? (ttf.combinedRate > 0 ? 'Filling at ~' : 'Emptying at ~') + Math.abs(ttf.combinedRate).toLocaleString() + ' lbs/hr' : 'Not enough data'}</div>
         <div style="font-size:9px;color:#475569;margin-top:1px">Based on both hoppers combined</div>
       </div>
     </div>
@@ -716,23 +742,7 @@ function renderGauges() {
         </div>
       </div>
     </div>
-    <div class="panel gauge-panel">
-      <div class="gauge-title">Combined Hopper Weight Over Time</div>
-      <canvas id="combinedChart" height="180"></canvas>
-    </div>
   `;
- 
-  const labels = d.map(r => r.time);
-  const combined = d.map(r => r.h1 + r.h2);
-  const maxCombined = cap.h1 + cap.h2;
-  new Chart(document.getElementById('combinedChart').getContext('2d'), {
-    type: 'line',
-    data: { labels, datasets: [
-      { label: 'Total Weight', data: combined, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', fill: true, tension: 0.35, borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: '#10b981' },
-      { label: 'Max Capacity', data: Array(labels.length).fill(maxCombined), borderColor: '#f8717155', borderDash: [6,4], borderWidth: 1.5, pointRadius: 0, fill: false }
-    ]},
-    options: { responsive: true, plugins: { legend: { labels: { color: '#94a3b8', usePointStyle: true, padding: 15 } } }, scales: { x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.4)' } }, y: { ticks: { color: '#64748b', callback: v => (v/1000)+'k' }, grid: { color: 'rgba(51,65,85,0.4)' } } } }
-  });
 }
  
 function renderLoadOutLog() {
@@ -760,15 +770,6 @@ function renderCharts() {
       { label: 'H2 Max ('+cap.h2.toLocaleString()+')', data: Array(labels.length).fill(cap.h2), borderColor: c2+'55', borderDash: [6,4], borderWidth: 1.5, pointRadius: 0, fill: false },
     ]},
     options: { responsive: true, interaction: { intersect: false, mode: 'index' }, plugins: { legend: { labels: { color: '#94a3b8', usePointStyle: true, pointStyle: 'circle', padding: 20 } }, tooltip: { backgroundColor: '#1e293b', borderColor: '#334155', borderWidth: 1, titleColor: '#e2e8f0', bodyColor: '#94a3b8', callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()} LBS` } } }, scales: { x: { ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 45 }, grid: { color: 'rgba(51,65,85,0.4)' } }, y: { ticks: { color: '#64748b', callback: v => (v/1000)+'k' }, grid: { color: 'rgba(51,65,85,0.4)' } } } }
-  });
- 
-  if (flowRateChart) flowRateChart.destroy();
-  const rateData = rates.slice(1);
-  const rateLabels = labels.slice(1);
-  flowRateChart = new Chart(document.getElementById('flowRateChart').getContext('2d'), {
-    type: 'bar',
-    data: { labels: rateLabels, datasets: [{ label: 'Flow Rate', data: rateData, backgroundColor: rateData.map(v => v >= 0 ? 'rgba(16,185,129,0.6)' : 'rgba(248,113,113,0.5)'), borderColor: rateData.map(v => v >= 0 ? '#10b981' : '#f87171'), borderWidth: 1.5, borderRadius: 4 }] },
-    options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.parsed.y >= 0 ? '+' : ''}${ctx.parsed.y.toLocaleString()} lbs/hr` } } }, scales: { x: { ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 45 }, grid: { color: 'rgba(51,65,85,0.4)' } }, y: { ticks: { color: '#64748b', callback: v => (v/1000)+'k' }, grid: { color: 'rgba(51,65,85,0.4)' } } } }
   });
  
   if (feedTankChart) feedTankChart.destroy();
@@ -807,7 +808,33 @@ function updateLatestBadge() {
   document.getElementById('latest-badge').textContent = 'Latest: ' + latest.toLocaleString('en-US', opts);
 }
  
-function renderAll() { updateLatestBadge(); renderStatusCards(); renderGauges(); renderLoadOutLog(); renderCharts(); renderTable(); }
+function renderShutdownLog() {
+  const el = document.getElementById('shutdown-log');
+  // Filter by current facility, sort newest first, take last 10
+  const events = shutdowns
+    .filter(s => s.facility === currentFacility)
+    .sort((a, b) => b.time - a.time)
+    .slice(0, 10);
+ 
+  if (!events.length) {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:#475569;font-size:13px">No centrifuge events for ' + (currentFacility === 'DM' ? 'Durham' : 'Rock Creek') + ' yet.</div>';
+    return;
+  }
+ 
+  el.innerHTML = `<table><thead><tr><th>Time</th><th>Event</th><th>H1 (LBS)</th><th>H2 (LBS)</th><th>Total (LBS)</th><th>Feed Tank (Ft)</th></tr></thead><tbody>${events.map(s => {
+    const total = (s.h1 + s.h2).toLocaleString();
+    return `<tr>
+      <td>${s.time.toLocaleString('en-US', {month:'numeric', day:'numeric', hour:'numeric', minute:'2-digit', hour12:true})}</td>
+      <td class="${s.event === 'Started' ? 'event-started' : 'event-stopped'}">${s.event === 'Started' ? 'Started Feeding' : 'Stopped Feeding'}</td>
+      <td>${s.h1.toLocaleString()}</td>
+      <td>${s.h2.toLocaleString()}</td>
+      <td style="font-weight:600">${total}</td>
+      <td>${s.feedTank.toFixed(1)} ft</td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+ 
+function renderAll() { updateLatestBadge(); renderStatusCards(); renderGauges(); renderLoadOutLog(); renderShutdownLog(); renderCharts(); renderTable(); }
  
 // ═══════════════════════════════════════════
 // SHARING / EXPORT
@@ -896,6 +923,17 @@ async function fetchAllData() {
         notes: [r.Truck, r.Notes].filter(Boolean).join(' — ')
       }));
       loadOutId = loadOuts.length;
+ 
+      // Parse shutdowns
+      const shutdownData = json.shutdowns || [];
+      shutdowns = shutdownData.map(s => ({
+        time: new Date(s.Timestamp),
+        facility: s.Facility,
+        event: s.Event,
+        h1: parseFloat(s.H1) || 0,
+        h2: parseFloat(s.H2) || 0,
+        feedTank: parseFloat(s.FeedTank) || 0
+      }));
  
       if (rawData.DM.length === 0 && rawData.RC.length === 0) {
         loadingEl.innerHTML = '<div style="text-align:center;padding:40px;color:#fbbf24;grid-column:1/-1"><div style="font-size:18px;font-weight:600">No readings yet</div><div style="font-size:12px;margin-top:8px">Waiting for first data update from scheduled task</div></div>';
