@@ -150,6 +150,10 @@
   .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px); background: #10b981; color: white; padding: 12px 24px; border-radius: 10px; font-size: 13px; font-weight: 600; z-index: 2000; transition: transform 0.3s; pointer-events: none; }
   .toast.show { transform: translateX(-50%) translateY(0); }
  
+  /* Live ticker pulse animation */
+  @keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+  .live-ticker { animation: livePulse 2s ease-in-out infinite; }
+ 
   @media (max-width: 1100px) { .status-cards { grid-template-columns: repeat(3, 1fr); } }
   @media (max-width: 900px) { .status-cards { grid-template-columns: repeat(2, 1fr); } .charts-grid, .hopper-gauges, .loadout-section { grid-template-columns: 1fr; } }
 </style>
@@ -280,6 +284,14 @@ const HOPPER_MAX = {
 };
  
 // ═══════════════════════════════════════════
+// FEED TANK SHUTDOWN THRESHOLDS (ft)
+// ═══════════════════════════════════════════
+const SHUTDOWN_LEVEL = {
+  DM: 5.0,
+  RC: 8.0
+};
+ 
+// ═══════════════════════════════════════════
 // RAW DATA from Gmail emails
 // ═══════════════════════════════════════════
 // Data loaded dynamically from Google Sheets
@@ -292,6 +304,15 @@ const SHEETS_API = 'https://script.google.com/macros/s/AKfycby3izDn8sdIYVdEv4eMs
 let loadOuts = [];
 let loadOutId = 0;
 let shutdowns = [];
+ 
+// ═══════════════════════════════════════════
+// LIVE TICKER STATE
+// Interpolates hopper weight between refreshes
+// ═══════════════════════════════════════════
+let liveTickerInterval = null;
+let liveHopperWeight = null;   // current interpolated combined weight
+let liveFlowRate = null;       // lbs per second for interpolation
+let liveTickerStart = null;    // when we started interpolating
  
 // Load-outs are now loaded by fetchAllData() on startup
 // This function kept for backward compatibility
@@ -603,6 +624,143 @@ function formatTimeToFull(hours) {
 }
  
 // ═══════════════════════════════════════════
+// ESTIMATED FULL TIME AS PST CLOCK
+// ═══════════════════════════════════════════
+function estimateFullClockTimePST(hours) {
+  if (hours === null || hours <= 0 || hours > 168) return null;
+  const now = new Date();
+  const fullTime = new Date(now.getTime() + hours * 3600000);
+  return fullTime.toLocaleString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'America/Los_Angeles'
+  }) + ' PST';
+}
+ 
+// ═══════════════════════════════════════════
+// PROJECTED SHUTDOWN ESTIMATE
+// Based on feed tank decline rate and shutdown thresholds
+// DM shuts down at 5 ft, RC at 8 ft
+// ═══════════════════════════════════════════
+function estimateShutdown(facility) {
+  const d = rawData[facility];
+  if (d.length < 2) return { hoursUntil: null, rate: null, currentLevel: null, shutoffLevel: null };
+ 
+  const shutoffLevel = SHUTDOWN_LEVEL[facility];
+  const latest = d[d.length - 1];
+  const currentLevel = latest.feedTank;
+ 
+  // If already at or below shutdown level
+  if (currentLevel <= shutoffLevel) {
+    return { hoursUntil: 0, rate: 0, currentLevel, shutoffLevel, clockTime: 'At/below shutoff' };
+  }
+ 
+  // Calculate feed tank decline rate using up to last 4 readings
+  const recent = d.slice(-Math.min(4, d.length));
+  let totalDeltaFt = 0;
+  let totalHours = 0;
+  let validCount = 0;
+ 
+  for (let i = 1; i < recent.length; i++) {
+    const t1 = recent[i-1].ts instanceof Date ? recent[i-1].ts : new Date(recent[i-1].ts);
+    const t2 = recent[i].ts instanceof Date ? recent[i].ts : new Date(recent[i].ts);
+    const hrs = (t2 - t1) / (1000 * 60 * 60);
+    if (hrs > 0) {
+      totalDeltaFt += (recent[i].feedTank - recent[i-1].feedTank);
+      totalHours += hrs;
+      validCount++;
+    }
+  }
+ 
+  if (validCount === 0 || totalHours === 0) {
+    return { hoursUntil: null, rate: null, currentLevel, shutoffLevel };
+  }
+ 
+  const ratePerHour = totalDeltaFt / totalHours; // ft/hr (negative = declining)
+ 
+  // If feed tank is rising or stable, no projected shutdown
+  if (ratePerHour >= 0) {
+    return { hoursUntil: null, rate: ratePerHour, currentLevel, shutoffLevel, rising: true };
+  }
+ 
+  // Hours until feed tank hits shutdown level
+  const remaining = currentLevel - shutoffLevel;
+  const hoursUntil = remaining / Math.abs(ratePerHour);
+ 
+  // Calculate projected clock time in PST
+  const now = new Date();
+  const shutdownTime = new Date(now.getTime() + hoursUntil * 3600000);
+  const clockTime = shutdownTime.toLocaleString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'America/Los_Angeles'
+  }) + ' PST';
+ 
+  return {
+    hoursUntil: Math.round(hoursUntil * 10) / 10,
+    rate: Math.round(ratePerHour * 100) / 100,
+    currentLevel,
+    shutoffLevel,
+    clockTime
+  };
+}
+ 
+function formatHoursShort(hours) {
+  if (hours === null) return 'N/A';
+  if (hours <= 0) return 'Now';
+  if (hours > 168) return '7+ days';
+  if (hours >= 24) return Math.floor(hours / 24) + 'd ' + Math.round(hours % 24) + 'h';
+  if (hours >= 1) return Math.floor(hours) + 'h ' + Math.round((hours % 1) * 60) + 'm';
+  return Math.round(hours * 60) + ' min';
+}
+ 
+// ═══════════════════════════════════════════
+// LIVE HOPPER WEIGHT TICKER
+// Interpolates between refreshes using flow rate
+// ═══════════════════════════════════════════
+function startLiveTicker() {
+  if (liveTickerInterval) clearInterval(liveTickerInterval);
+ 
+  const d = rawData[currentFacility];
+  if (!d || d.length < 2) return;
+ 
+  const cap = HOPPER_MAX[currentFacility];
+  const maxCombined = cap.h1 + cap.h2;
+  const latest = d[d.length - 1];
+  const latestTs = latest.ts instanceof Date ? latest.ts : new Date(latest.ts);
+  const recentLO = getTotalLoadOutAfter(currentFacility, latestTs);
+  const baseWeight = (latest.h1 + latest.h2) - recentLO;
+ 
+  const ttf = estimateHoursUntilFull(currentFacility);
+  const ratePerHour = ttf.combinedRate || 0;
+  const ratePerSecond = ratePerHour / 3600;
+ 
+  liveHopperWeight = baseWeight;
+  liveFlowRate = ratePerSecond;
+  liveTickerStart = Date.now();
+ 
+  // Update every second
+  liveTickerInterval = setInterval(() => {
+    const elapsed = (Date.now() - liveTickerStart) / 1000; // seconds
+    const interpolated = Math.max(0, Math.min(maxCombined, baseWeight + (ratePerSecond * elapsed)));
+    liveHopperWeight = Math.round(interpolated);
+ 
+    // Update the live ticker element if it exists
+    const el = document.getElementById('live-hopper-value');
+    if (el) el.textContent = liveHopperWeight.toLocaleString();
+ 
+    const pctEl = document.getElementById('live-hopper-pct');
+    if (pctEl) pctEl.textContent = Math.round((liveHopperWeight / maxCombined) * 100) + '%';
+  }, 1000);
+}
+ 
+// ═══════════════════════════════════════════
 // RENDERING
 // ═══════════════════════════════════════════
 let currentFacility = 'DM';
@@ -636,7 +794,6 @@ function renderStatusCards() {
   const pct2 = Math.round((latest.h2 / cap.h2) * 100);
  
   // Combined total — only subtract load-outs logged AFTER the latest email reading
-  // (load-outs before the latest email are already reflected in the reported weights)
   const currentTotal = (latest.h1 || 0) + (latest.h2 || 0);
   const prevTotal = (prev.h1 || 0) + (prev.h2 || 0);
   const latestTs = latest.ts instanceof Date ? latest.ts : new Date(latest.ts);
@@ -648,10 +805,39 @@ function renderStatusCards() {
   const ttf = estimateHoursUntilFull(currentFacility);
   const ttfColor = ttf.combined !== null && ttf.combined > 0 ? (ttf.combined <= 6 ? '#f87171' : ttf.combined <= 12 ? '#fbbf24' : '#34d399') : ttf.combined === -1 ? '#34d399' : '#64748b';
  
+  // PST clock time for time until full
+  const fullClockPST = ttf.combined !== null && ttf.combined > 0 ? estimateFullClockTimePST(ttf.combined) : null;
+ 
+  // Projected shutdown estimate
+  const sd = estimateShutdown(currentFacility);
+  const sdColor = sd.hoursUntil !== null ? (sd.hoursUntil <= 2 ? '#f87171' : sd.hoursUntil <= 6 ? '#fbbf24' : '#34d399') : sd.rising ? '#34d399' : '#64748b';
+ 
   function arrow(val) {
     if (val > 0) return `<span style="color:#34d399">&#9650; +${val.toLocaleString()}</span>`;
     if (val < 0) return `<span style="color:#f87171">&#9660; ${val.toLocaleString()}</span>`;
     return `<span style="color:#64748b">&#8212; 0</span>`;
+  }
+ 
+  // Shutdown card content
+  let shutdownCardHTML = '';
+  if (sd.hoursUntil !== null && sd.hoursUntil >= 0) {
+    shutdownCardHTML = `
+      <div style="font-size:22px;font-weight:800;color:${sdColor}">${sd.hoursUntil === 0 ? 'NOW' : formatHoursShort(sd.hoursUntil)}</div>
+      <div style="font-size:11px;color:#f59e0b;font-weight:600;margin-top:2px">${sd.clockTime || ''}</div>
+      <div style="font-size:10px;color:#64748b;margin-top:4px">Level: ${sd.currentLevel.toFixed(1)} ft → ${sd.shutoffLevel} ft cutoff</div>
+      <div style="font-size:10px;color:#64748b">Declining ${Math.abs(sd.rate).toFixed(2)} ft/hr</div>
+    `;
+  } else if (sd.rising) {
+    shutdownCardHTML = `
+      <div style="font-size:22px;font-weight:800;color:#34d399">Rising</div>
+      <div style="font-size:10px;color:#64748b;margin-top:4px">Level: ${sd.currentLevel.toFixed(1)} ft (cutoff: ${sd.shutoffLevel} ft)</div>
+      <div style="font-size:10px;color:#34d399">+${Math.abs(sd.rate).toFixed(2)} ft/hr &mdash; no shutdown projected</div>
+    `;
+  } else {
+    shutdownCardHTML = `
+      <div style="font-size:22px;font-weight:800;color:#64748b">N/A</div>
+      <div style="font-size:10px;color:#64748b;margin-top:4px">Not enough data to project</div>
+    `;
   }
  
   document.getElementById('status-cards').innerHTML = `
@@ -687,8 +873,25 @@ function renderStatusCards() {
       <div class="label">Time Until Full</div>
       <div style="margin-top:4px">
         <div style="font-size:26px;font-weight:800;color:${ttfColor}">${ttf.combined === -1 ? 'Declining' : ttf.combined !== null && ttf.combined > 0 ? formatTimeToFull(ttf.combined) : 'N/A'}</div>
+        ${fullClockPST ? `<div style="font-size:11px;color:#60a5fa;font-weight:600;margin-top:2px">Est. full by ${fullClockPST}</div>` : ''}
         <div style="font-size:10px;color:#64748b;margin-top:2px">${ttf.combinedRate ? (ttf.combinedRate > 0 ? 'Filling at ~' : 'Emptying at ~') + Math.abs(ttf.combinedRate).toLocaleString() + ' lbs/hr' : 'Not enough data'}</div>
         <div style="font-size:9px;color:#475569;margin-top:1px">Based on both hoppers combined</div>
+      </div>
+    </div>
+    <div class="status-card" style="border-left:3px solid ${sdColor};position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#f59e0b,#ef4444)"></div>
+      <div class="label">Projected Shutdown</div>
+      <div style="margin-top:4px">
+        ${shutdownCardHTML}
+      </div>
+    </div>
+    <div class="status-card" style="border-left:3px solid #06b6d4;position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#06b6d4,#3b82f6)"></div>
+      <div class="label">Live Hopper Estimate</div>
+      <div style="margin-top:4px">
+        <div style="font-size:22px;font-weight:800;color:#22d3ee" class="live-ticker"><span id="live-hopper-value">${adjTotal.toLocaleString()}</span><span class="unit">LBS</span></div>
+        <div style="font-size:11px;color:#64748b;margin-top:2px"><span id="live-hopper-pct">${pctTotal}</span>% of max</div>
+        <div style="font-size:10px;color:#475569;margin-top:1px">Updates every second based on flow rate</div>
       </div>
     </div>
     <div class="status-card loads-out">
@@ -697,6 +900,9 @@ function renderStatusCards() {
       <div class="subtext">${totalLO > 0 ? totalLO.toLocaleString() + ' LBS total' : 'None logged yet'}</div>
     </div>
   `;
+ 
+  // Start the live ticker after rendering so the DOM elements exist
+  startLiveTicker();
 }
  
 function renderGauges() {
@@ -772,10 +978,17 @@ function renderCharts() {
   });
  
   if (feedTankChart) feedTankChart.destroy();
+ 
+  // Add shutdown threshold line to feed tank chart
+  const shutoffLevel = SHUTDOWN_LEVEL[currentFacility];
+ 
   feedTankChart = new Chart(document.getElementById('feedTankChart').getContext('2d'), {
     type: 'line',
-    data: { labels, datasets: [{ label: 'Feed Tank Level', data: d.map(r => r.feedTank), borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,0.08)', fill: true, tension: 0.35, borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: '#22d3ee' }] },
-    options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 45 }, grid: { color: 'rgba(51,65,85,0.4)' } }, y: { ticks: { color: '#64748b', callback: v => v+' ft' }, grid: { color: 'rgba(51,65,85,0.4)' }, suggestedMin: 6, suggestedMax: 12 } } }
+    data: { labels, datasets: [
+      { label: 'Feed Tank Level', data: d.map(r => r.feedTank), borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,0.08)', fill: true, tension: 0.35, borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: '#22d3ee' },
+      { label: 'Shutdown Level (' + shutoffLevel + ' ft)', data: Array(labels.length).fill(shutoffLevel), borderColor: '#ef4444', borderDash: [8, 4], borderWidth: 2, pointRadius: 0, fill: false }
+    ] },
+    options: { responsive: true, plugins: { legend: { labels: { color: '#94a3b8', usePointStyle: true, pointStyle: 'circle', padding: 20 } } }, scales: { x: { ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 45 }, grid: { color: 'rgba(51,65,85,0.4)' } }, y: { ticks: { color: '#64748b', callback: v => v+' ft' }, grid: { color: 'rgba(51,65,85,0.4)' }, suggestedMin: Math.min(shutoffLevel - 1, 4), suggestedMax: 12 } } }
   });
 }
  
@@ -786,7 +999,7 @@ function renderTable() {
     const total = r.h1 + r.h2;
     const prevT = i > 0 ? d[i-1].h1 + d[i-1].h2 : null;
     const delta = prevT !== null ? total - prevT : null;
-    const lo = i > 0 ? getTotalLoadOutBetween(currentFacility, d[i-1].ts, r.ts) : 0;
+    const lo = i > 0 ? getTotalLoadOutBetween(currentFacility, d[i-1].ts, d[i].ts) : 0;
     const rate = rates[i];
     return `<tr>
       <td>${r.time}</td><td>${r.h1.toLocaleString()}</td><td>${r.h2.toLocaleString()}</td>
@@ -802,6 +1015,7 @@ function renderTable() {
  
 function updateLatestBadge() {
   const allTs = [...rawData.DM, ...rawData.RC].map(d => d.ts instanceof Date ? d.ts.getTime() : d.ts);
+  if (allTs.length === 0) return;
   const latest = new Date(Math.max(...allTs));
   const opts = { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short' };
   document.getElementById('latest-badge').textContent = 'Latest: ' + latest.toLocaleString('en-US', opts);
@@ -809,6 +1023,7 @@ function updateLatestBadge() {
  
 function renderShutdownLog() {
   const el = document.getElementById('shutdown-log');
+  if (!el) return;
   // Filter by current facility, sort newest first, take last 10
   const events = shutdowns
     .filter(s => s.facility === currentFacility)
@@ -978,3 +1193,4 @@ setInterval(fetchAllData, 5 * 60 * 1000);
 </script>
 </body>
 </html>
+ 
