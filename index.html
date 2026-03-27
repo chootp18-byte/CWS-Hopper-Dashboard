@@ -197,15 +197,27 @@
  
     <div class="form-row">
       <div class="form-group">
-        <label>Date &amp; Time</label>
-        <input type="datetime-local" id="loadout-time">
+        <label>Truck Entry Time</label>
+        <input type="datetime-local" id="loadout-entry-time">
+        <span class="autofill-hint" id="entry-hint" style="display:none"></span>
       </div>
+      <div class="form-group">
+        <label>Truck Exit Time</label>
+        <input type="datetime-local" id="loadout-exit-time">
+        <span class="autofill-hint" id="exit-hint" style="display:none"></span>
+      </div>
+    </div>
+    <div class="form-row">
       <div class="form-group">
         <label>Facility</label>
         <select id="loadout-facility">
           <option value="DM">Durham (DM)</option>
           <option value="RC">Rock Creek (RC)</option>
         </select>
+      </div>
+      <div class="form-group">
+        <label>&nbsp;</label>
+        <div style="font-size:10px;color:#64748b;padding:10px 0">Entry/exit times from ticket define the loading window &mdash; readings during this window are excluded from flow rate.</div>
       </div>
     </div>
     <div class="form-row">
@@ -321,29 +333,50 @@ async function loadFromSheets() {
 }
  
 async function addLoadOut() {
-  const timeInput = document.getElementById('loadout-time').value;
+  const entryTime = document.getElementById('loadout-entry-time').value;
+  const exitTime = document.getElementById('loadout-exit-time').value;
   const facility = document.getElementById('loadout-facility').value;
   const weight = parseFloat(document.getElementById('loadout-weight').value);
   const truck = document.getElementById('loadout-truck').value;
   const notes = document.getElementById('loadout-notes').value;
  
-  if (!timeInput || !weight || weight <= 0) {
-    showToast('Please enter a valid time and weight');
+  if (!entryTime || !exitTime || !weight || weight <= 0) {
+    showToast('Please enter entry time, exit time, and weight');
+    return;
+  }
+ 
+  const entryDate = new Date(entryTime);
+  const exitDate = new Date(exitTime);
+ 
+  if (exitDate <= entryDate) {
+    showToast('Exit time must be after entry time');
     return;
   }
  
   const combined = [truck, notes].filter(Boolean).join(' — ');
   const localId = ++loadOutId;
-  loadOuts.push({ id: localId, time: new Date(timeInput), facility, weight, notes: combined });
+  loadOuts.push({
+    id: localId,
+    time: exitDate,           // keep for backward compat (sort, display)
+    entryTime: entryDate,     // truck entered facility
+    exitTime: exitDate,       // truck left facility
+    facility,
+    weight,
+    notes: combined
+  });
  
+  document.getElementById('loadout-entry-time').value = '';
+  document.getElementById('loadout-exit-time').value = '';
   document.getElementById('loadout-weight').value = '';
   document.getElementById('loadout-truck').value = '';
   document.getElementById('loadout-notes').value = '';
   document.getElementById('weight-hint').style.display = 'none';
+  document.getElementById('entry-hint').style.display = 'none';
+  document.getElementById('exit-hint').style.display = 'none';
   document.getElementById('scan-preview').style.display = 'none';
   document.getElementById('scan-zone').style.display = '';
  
-  showToast(`Load-out of ${weight.toLocaleString()} LBS recorded`);
+  showToast(`Load-out of ${weight.toLocaleString()} LBS recorded (${Math.round((exitDate - entryDate)/60000)} min loading window)`);
   renderAll();
  
   // Persist to Google Sheets in background
@@ -353,7 +386,9 @@ async function addLoadOut() {
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({
         action: 'add',
-        timestamp: new Date(timeInput).toISOString(),
+        timestamp: exitDate.toISOString(),
+        entryTime: entryDate.toISOString(),
+        exitTime: exitDate.toISOString(),
         facility: facility,
         hopper: 'combined',
         weight: weight,
@@ -451,7 +486,18 @@ async function handleTicketUpload(event) {
       document.getElementById('weight-hint').textContent = 'Auto-filled from ticket scan (net weight)';
       document.getElementById('weight-hint').style.display = 'block';
       if (parsed.truck) document.getElementById('loadout-truck').value = parsed.truck;
-      if (parsed.date) document.getElementById('loadout-time').value = parsed.date;
+      if (parsed.entryTime) {
+        document.getElementById('loadout-entry-time').value = parsed.entryTime;
+        document.getElementById('entry-hint').textContent = 'Auto-filled from ticket (entry time)';
+        document.getElementById('entry-hint').style.display = 'block';
+      } else if (parsed.date) {
+        document.getElementById('loadout-entry-time').value = parsed.date;
+      }
+      if (parsed.exitTime) {
+        document.getElementById('loadout-exit-time').value = parsed.exitTime;
+        document.getElementById('exit-hint').textContent = 'Auto-filled from ticket (exit time)';
+        document.getElementById('exit-hint').style.display = 'block';
+      }
     } else {
       status.className = 'scan-status scan-fail';
       status.textContent = 'Could not find net weight on ticket. Please enter manually below.';
@@ -467,7 +513,7 @@ async function handleTicketUpload(event) {
 }
  
 function parseTicketText(text) {
-  const result = { weight: null, truck: null, date: null };
+  const result = { weight: null, truck: null, date: null, entryTime: null, exitTime: null };
   const lines = text.toUpperCase();
  
   // Try to find GROSS, TARE, and NET to calculate net weight properly
@@ -526,7 +572,52 @@ function parseTicketText(text) {
   const truckMatch = text.match(/(?:TRUCK|TRK|VEHICLE|VEH|UNIT)\s*[#:\-]?\s*([A-Z0-9\-]+)/i);
   if (truckMatch) result.truck = truckMatch[1].trim();
  
-  // Extract date
+  // Extract entry/exit timestamps
+  // Look for patterns like "TIME IN: 3/27/2026 1:55 PM" and "TIME OUT: 3/27/2026 2:10 PM"
+  const timeInPatterns = [
+    /(?:TIME\s*IN|ENTRY|ENTER|ARRIVED?|IN\s*TIME|CHECK\s*IN)[:\s]*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\s*(\d{1,2}):(\d{2})\s*(AM|PM)?/i,
+    /(?:TIME\s*IN|ENTRY|ENTER|ARRIVED?|IN\s*TIME|CHECK\s*IN)[:\s]*(\d{1,2}):(\d{2})\s*(AM|PM)?/i,
+  ];
+  const timeOutPatterns = [
+    /(?:TIME\s*OUT|EXIT|DEPART(?:ED)?|LEFT|OUT\s*TIME|CHECK\s*OUT)[:\s]*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\s*(\d{1,2}):(\d{2})\s*(AM|PM)?/i,
+    /(?:TIME\s*OUT|EXIT|DEPART(?:ED)?|LEFT|OUT\s*TIME|CHECK\s*OUT)[:\s]*(\d{1,2}):(\d{2})\s*(AM|PM)?/i,
+  ];
+ 
+  function parseTicketDateTime(patterns, fallbackDate) {
+    for (const pat of patterns) {
+      const m = text.match(pat);
+      if (m) {
+        // Full date+time pattern (6+ groups)
+        if (m.length >= 6 && m[3] && m[3].length >= 2) {
+          let yr = parseInt(m[3]); if (yr < 100) yr += 2000;
+          let hr = parseInt(m[4]);
+          const min = parseInt(m[5]);
+          const ampm = m[6] || '';
+          if (ampm.toUpperCase() === 'PM' && hr < 12) hr += 12;
+          if (ampm.toUpperCase() === 'AM' && hr === 12) hr = 0;
+          const dt = new Date(yr, parseInt(m[1])-1, parseInt(m[2]), hr, min);
+          return dt.toISOString().slice(0, 16);
+        }
+        // Time-only pattern (3 groups: hr, min, ampm)
+        if (m.length >= 3) {
+          let hr = parseInt(m[1]);
+          const min = parseInt(m[2]);
+          const ampm = m[3] || '';
+          if (ampm.toUpperCase() === 'PM' && hr < 12) hr += 12;
+          if (ampm.toUpperCase() === 'AM' && hr === 12) hr = 0;
+          const now = new Date();
+          const dt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hr, min);
+          return dt.toISOString().slice(0, 16);
+        }
+      }
+    }
+    return null;
+  }
+ 
+  result.entryTime = parseTicketDateTime(timeInPatterns);
+  result.exitTime = parseTicketDateTime(timeOutPatterns);
+ 
+  // Fallback: generic date for backward compat
   const dateMatch = text.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\s*(\d{1,2}):(\d{2})/);
   if (dateMatch) {
     let yr = parseInt(dateMatch[3]);
@@ -552,19 +643,126 @@ scanZone.addEventListener('drop', e => {
 });
  
 // ═══════════════════════════════════════════
-// CALCULATED FLOW RATE (combined total)
+// LOADING WINDOW HELPERS
+// Check if a time range overlaps any truck loading window
 // ═══════════════════════════════════════════
+function getLoadingWindows(facility) {
+  return loadOuts
+    .filter(l => l.facility === facility && l.entryTime && l.exitTime)
+    .map(l => ({ entry: l.entryTime, exit: l.exitTime, weight: l.weight }));
+}
+ 
+function intervalOverlapsLoading(t1, t2, windows) {
+  return windows.some(w => w.entry < t2 && w.exit > t1);
+}
+ 
+function getLoadWeightInInterval(t1, t2, facility) {
+  // Sum load-outs whose loading window overlaps this interval
+  // For loads WITH entry/exit: attribute proportionally based on overlap
+  // For loads WITHOUT entry/exit (legacy): use simple timestamp check
+  let total = 0;
+  for (const l of loadOuts) {
+    if (l.facility !== facility) continue;
+    if (l.entryTime && l.exitTime) {
+      // Only count if the entire loading window is contained in or overlaps this interval
+      // Attribute the full weight if any overlap (the merged window approach handles accuracy)
+      if (l.entryTime < t2 && l.exitTime > t1) {
+        total += l.weight;
+      }
+    } else {
+      // Legacy: no entry/exit, use the single timestamp
+      if (l.time >= t1 && l.time <= t2) {
+        total += l.weight;
+      }
+    }
+  }
+  return total;
+}
+ 
+// ═══════════════════════════════════════════
+// CALCULATED FLOW RATE (combined total)
+// Uses loading windows to identify clean vs contaminated intervals.
+// Clean intervals: no truck was loading — rate is measured directly.
+// Contaminated intervals: a truck was loading — rate uses the
+//   last known clean rate (baseline) instead of the bad measurement.
+// ═══════════════════════════════════════════
+let baselineFlowRate = { DM: null, RC: null };
+ 
 function computeFlowRates(facility) {
   const d = rawData[facility];
+  const windows = getLoadingWindows(facility);
   const rates = [null];
+ 
+  // First pass: compute raw rates and identify clean intervals
+  const rawRates = [null];
+  const isClean = [false];
+ 
   for (let i = 1; i < d.length; i++) {
+    const t1 = d[i-1].ts instanceof Date ? d[i-1].ts : new Date(d[i-1].ts);
+    const t2 = d[i].ts instanceof Date ? d[i].ts : new Date(d[i].ts);
     const total1 = d[i-1].h1 + d[i-1].h2;
     const total2 = d[i].h1 + d[i].h2;
-    const hours = (d[i].ts - d[i-1].ts) / (1000 * 60 * 60);
-    const loadOutWeight = getTotalLoadOutBetween(facility, d[i-1].ts, d[i].ts);
-    const netProduction = (total2 - total1) + loadOutWeight;
-    rates.push(hours > 0 ? Math.round(netProduction / hours) : 0);
+    const hours = (t2 - t1) / (1000 * 60 * 60);
+ 
+    if (hours <= 0) {
+      rawRates.push(0);
+      isClean.push(false);
+      continue;
+    }
+ 
+    const overlaps = intervalOverlapsLoading(t1, t2, windows);
+ 
+    if (!overlaps) {
+      // Clean interval — no truck was loading
+      // Still add back any legacy load-outs (no entry/exit times)
+      const legacyLO = loadOuts
+        .filter(l => l.facility === facility && !l.entryTime && !l.exitTime && l.time >= t1 && l.time <= t2)
+        .reduce((s, l) => s + l.weight, 0);
+      const rate = Math.round(((total2 - total1) + legacyLO) / hours);
+      rawRates.push(rate);
+      isClean.push(true);
+    } else {
+      // Contaminated interval — truck was loading during this reading
+      // Calculate what we can: total delta + known load weight
+      const loadWeight = getLoadWeightInInterval(t1, t2, facility);
+      const rate = Math.round(((total2 - total1) + loadWeight) / hours);
+      rawRates.push(rate);
+      isClean.push(false);
+    }
   }
+ 
+  // Build baseline from clean intervals (weighted toward recent)
+  const cleanRates = [];
+  for (let i = 1; i < rawRates.length; i++) {
+    if (isClean[i] && rawRates[i] !== null) {
+      cleanRates.push(rawRates[i]);
+    }
+  }
+ 
+  if (cleanRates.length > 0) {
+    // Use last 3 clean intervals, weighted: 50% most recent, 30% next, 20% oldest
+    const recent = cleanRates.slice(-3);
+    if (recent.length === 1) {
+      baselineFlowRate[facility] = recent[0];
+    } else if (recent.length === 2) {
+      baselineFlowRate[facility] = Math.round(recent[1] * 0.6 + recent[0] * 0.4);
+    } else {
+      baselineFlowRate[facility] = Math.round(recent[2] * 0.5 + recent[1] * 0.3 + recent[0] * 0.2);
+    }
+  }
+ 
+  // Second pass: build final rates array
+  // Clean intervals use their measured rate
+  // Contaminated intervals use the baseline (known-good) rate
+  for (let i = 1; i < d.length; i++) {
+    if (isClean[i]) {
+      rates.push(rawRates[i]);
+    } else {
+      // Use baseline if available, otherwise fall back to the raw (imperfect) rate
+      rates.push(baselineFlowRate[facility] !== null ? baselineFlowRate[facility] : rawRates[i]);
+    }
+  }
+ 
   return rates;
 }
  
@@ -577,24 +775,11 @@ function estimateHoursUntilFull(facility) {
   const maxCombined = cap.h1 + cap.h2;
   if (d.length < 2) return { combined: null, combinedRate: null };
  
-  // Use up to last 3 readings to compute average combined fill rate per hour
-  const recent = d.slice(-Math.min(3, d.length));
-  let combinedRate = 0;
-  let validIntervals = 0;
-  for (let i = 1; i < recent.length; i++) {
-    const t1 = recent[i-1].ts instanceof Date ? recent[i-1].ts : new Date(recent[i-1].ts);
-    const t2 = recent[i].ts instanceof Date ? recent[i].ts : new Date(recent[i].ts);
-    const hrs = (t2 - t1) / (1000 * 60 * 60);
-    if (hrs > 0) {
-      const total1 = (recent[i-1].h1 || 0) + (recent[i-1].h2 || 0);
-      const total2 = (recent[i].h1 || 0) + (recent[i].h2 || 0);
-      const lo = getTotalLoadOutBetween(facility, t1, t2);
-      combinedRate += ((total2 - total1) + lo) / hrs;
-      validIntervals++;
-    }
-  }
-  if (validIntervals === 0) return { combined: null, combinedRate: null };
-  combinedRate = combinedRate / validIntervals;
+  // Use the latest single interval to match the Flow Rate card exactly
+  const rates = computeFlowRates(facility);
+  const latestRate = rates[rates.length - 1];
+  let combinedRate = latestRate !== null ? latestRate : 0;
+  if (latestRate === null) return { combined: null, combinedRate: null };
  
   const latest = d[d.length - 1];
   const currentTotal = (latest.h1 || 0) + (latest.h2 || 0);
@@ -812,6 +997,14 @@ function renderStatusCards() {
   const sd = estimateShutdown(currentFacility);
   const sdColor = sd.hoursUntil !== null ? (sd.hoursUntil <= 2 ? '#f87171' : sd.hoursUntil <= 6 ? '#fbbf24' : '#34d399') : sd.rising ? '#34d399' : '#64748b';
  
+  // Check if a truck is currently on-site (entry logged but no exit yet, or exit is in the future)
+  const now = new Date();
+  const isLoadingNow = loadOuts.some(l =>
+    l.facility === currentFacility &&
+    l.entryTime && l.exitTime &&
+    l.entryTime <= now && l.exitTime >= now
+  );
+ 
   function arrow(val) {
     if (val > 0) return `<span style="color:#34d399">&#9650; +${val.toLocaleString()}</span>`;
     if (val < 0) return `<span style="color:#f87171">&#9660; ${val.toLocaleString()}</span>`;
@@ -865,9 +1058,9 @@ function renderStatusCards() {
       <div class="subtext">${arrow(Math.round((latest.feedTank - prev.feedTank)*10)/10)} vs prior</div>
     </div>
     <div class="status-card flow-rate">
-      <div class="label">Flow Rate</div>
+      <div class="label">Flow Rate${isLoadingNow ? ' (baseline)' : ''}</div>
       <div class="value">${latestRate !== null ? (latestRate >= 0 ? '+' : '') + latestRate.toLocaleString() : '—'}<span class="unit">lbs/hr</span></div>
-      <div class="subtext">${latest.feeding ? 'Centrifuge ON' : 'Centrifuge OFF'}</div>
+      <div class="subtext">${latest.feeding ? 'Centrifuge ON' : 'Centrifuge OFF'}${isLoadingNow ? ' <span style="color:#f59e0b;font-size:9px">· Using clean baseline</span>' : ''}</div>
     </div>
     <div class="status-card" style="border-left:3px solid ${ttfColor}">
       <div class="label">Time Until Full</div>
@@ -885,13 +1078,18 @@ function renderStatusCards() {
         ${shutdownCardHTML}
       </div>
     </div>
-    <div class="status-card" style="border-left:3px solid #06b6d4;position:relative;overflow:hidden">
-      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#06b6d4,#3b82f6)"></div>
+    <div class="status-card" style="border-left:3px solid ${isLoadingNow ? '#f59e0b' : '#06b6d4'};position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:${isLoadingNow ? 'linear-gradient(90deg,#f59e0b,#ef4444)' : 'linear-gradient(90deg,#06b6d4,#3b82f6)'}"></div>
       <div class="label">Live Hopper Estimate</div>
       <div style="margin-top:4px">
-        <div style="font-size:22px;font-weight:800;color:#22d3ee" class="live-ticker"><span id="live-hopper-value">${adjTotal.toLocaleString()}</span><span class="unit">LBS</span></div>
-        <div style="font-size:11px;color:#64748b;margin-top:2px"><span id="live-hopper-pct">${pctTotal}</span>% of max</div>
-        <div style="font-size:10px;color:#475569;margin-top:1px">Updates every second based on flow rate</div>
+        ${isLoadingNow
+          ? `<div style="font-size:18px;font-weight:800;color:#fbbf24">Loading...</div>
+             <div style="font-size:10px;color:#f59e0b;margin-top:4px">Truck on-site &mdash; weight unreliable</div>
+             <div style="font-size:10px;color:#64748b;margin-top:2px">Last known: ${adjTotal.toLocaleString()} LBS</div>`
+          : `<div style="font-size:22px;font-weight:800;color:#22d3ee" class="live-ticker"><span id="live-hopper-value">${adjTotal.toLocaleString()}</span><span class="unit">LBS</span></div>
+             <div style="font-size:11px;color:#64748b;margin-top:2px"><span id="live-hopper-pct">${pctTotal}</span>% of max</div>
+             <div style="font-size:10px;color:#475569;margin-top:1px">Updates every second based on flow rate</div>`
+        }
       </div>
     </div>
     <div class="status-card loads-out">
@@ -954,7 +1152,11 @@ function renderLoadOutLog() {
   const logs = loadOuts.filter(l => l.facility === currentFacility).sort((a,b) => b.time - a.time);
   const el = document.getElementById('loadout-log');
   if (!logs.length) { el.innerHTML = '<div class="empty-log">No load-outs logged yet.<br>Upload a ticket photo or enter manually.</div>'; return; }
-  el.innerHTML = `<table><thead><tr><th>Time</th><th>Weight</th><th>Notes</th><th></th></tr></thead><tbody>${logs.map(l => `<tr><td>${l.time.toLocaleString('en-US',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'})}</td><td style="color:#fbbf24;font-weight:600">-${l.weight.toLocaleString()} LBS</td><td>${l.notes||'—'}</td><td><button class="delete-btn" onclick="removeLoadOut('${l.id}')">&times;</button></td></tr>`).join('')}</tbody></table>`;
+  const fmt = (d) => d ? d.toLocaleString('en-US',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'}) : '—';
+  el.innerHTML = `<table><thead><tr><th>Entry</th><th>Exit</th><th>Weight</th><th>Notes</th><th></th></tr></thead><tbody>${logs.map(l => {
+    const duration = l.entryTime && l.exitTime ? Math.round((l.exitTime - l.entryTime)/60000) + ' min' : '';
+    return `<tr><td>${fmt(l.entryTime)}</td><td>${fmt(l.exitTime)}<br><span style="font-size:9px;color:#64748b">${duration}</span></td><td style="color:#fbbf24;font-weight:600">-${l.weight.toLocaleString()} LBS</td><td>${l.notes||'—'}</td><td><button class="delete-btn" onclick="removeLoadOut('${l.id}')">&times;</button></td></tr>`;
+  }).join('')}</tbody></table>`;
 }
  
 function renderCharts() {
@@ -1126,12 +1328,14 @@ async function fetchAllData() {
         else if (r.Facility === 'RC') rawData.RC.push(entry);
       }
  
-      // Parse load-outs
+      // Parse load-outs (with optional entry/exit times)
       const loadoutData = json.loadouts || [];
       loadOuts = loadoutData.map(r => ({
         id: r.ID || (++loadOutId + ''),
         sheetId: r.ID,
         time: new Date(r.Timestamp),
+        entryTime: r.EntryTime ? new Date(r.EntryTime) : null,
+        exitTime: r.ExitTime ? new Date(r.ExitTime) : null,
         facility: r.Facility,
         weight: parseFloat(r.Weight_LBS) || 0,
         notes: [r.Truck, r.Notes].filter(Boolean).join(' — ')
@@ -1185,7 +1389,8 @@ function updateRefreshBadge() {
 setInterval(updateRefreshBadge, 30000);
  
 // Init
-document.getElementById('loadout-time').value = new Date().toISOString().slice(0,16);
+// Pre-fill entry time to now (exit will be filled when truck leaves)
+document.getElementById('loadout-entry-time').value = new Date().toISOString().slice(0,16);
 // Fetch live data from Google Sheets (replaces hardcoded rawData)
 fetchAllData();
 // Auto-refresh every 5 minutes
