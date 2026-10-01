@@ -10,7 +10,7 @@
 <div class="dev">Loading live sources · Read-only dashboard</div>
 <header>
 <div class="brand">
-<img src="CWS Pic.jpg" alt="CWS">
+<img src="hei-mark.png" alt="Horner Enterprises">
 <div>
 <small>HORNER ENTERPRISES / CWS</small>
 <h1>Hopper overview</h1>
@@ -25,20 +25,21 @@
 </div>
 <button id="refresh">Refresh data</button>
 </div>
+<p id="data-error" class="warning" role="alert" hidden></p>
 <section id="facilities" class="facilities" aria-label="Facility measurements">
 </section>
 <p id="checked" class="muted"></p>
-<p><a class="button" href="#recent-loads">View HaulTrack loads</a></p>
-<p class="footnote">Report cadence: every 2 hours. Stale after 2 hours 30 minutes. Full operating limits confirmed by the user: Durham 129,000 / 130,000 lb; Rock Creek 105,000 / 109,000 lb. Shutdown scenarios display Pacific time (PDT/PST); report history uses your device timezone.</p>
-<p id="data-error" class="warning" role="alert" hidden></p>
-<section class="panel" id="trends">
+
+<details class="source-notes"><summary>Source & limits</summary><p class="footnote">Report cadence: every 2 hours. Stale after 2 hours 30 minutes. Full operating limits confirmed by the user: Durham 129,000 / 130,000 lb; Rock Creek 105,000 / 109,000 lb. Shutdown scenarios display Pacific time (PDT/PST); report history uses your device timezone.</p></details>
+
+<details class="panel" id="trends"><summary>Trends, reading history & HaulTrack totals</summary>
 <div class="heading"><div><small>REPORT HISTORY</small><h2><span id="detail-name">Durham</span> trends &amp; loads</h2></div><div class="facility-tabs" role="group" aria-label="History facility"><button data-facility="DM" aria-pressed="true">Durham</button><button data-facility="RC" aria-pressed="false">Rock Creek</button></div></div>
 <p id="chart-range" class="muted"></p>
 <div class="chart-grid"><div><h3 class="chart-title">Hopper weights <span class="muted">lb</span></h3><div id="weight-chart" class="chart"></div><p class="legend"><span>● Hopper 1</span><span>● Hopper 2</span><span class="muted">Dashed lines: capacity</span></p></div><div><h3 class="chart-title">Feed tank <span class="muted">ft</span></h3><div id="tank-chart" class="chart"></div><p class="muted">Low-level rule: Durham strictly below 5 ft; Rock Creek strictly below 8 ft. The separate tank card projects a provisional net level trend, not physical consumption.</p></div></div>
 <p class="muted">Lines connect source reports; they are not continuous telemetry. Load-outs can explain downward steps. Reported values are below.</p>
-<details open><summary>Recent reported readings</summary><div class="table-wrap"><table><thead><tr><th>Reported at</th><th>H1 lb</th><th>H2 lb</th><th>Change lb</th><th>Hauled between reports lb</th><th>Tank</th><th>Status</th></tr></thead><tbody id="history"></tbody></table></div></details>
+<details><summary>Recent reported readings</summary><div class="table-wrap"><table><thead><tr><th>Reported at</th><th>H1 lb</th><th>H2 lb</th><th>Change lb</th><th>Hauled between reports lb</th><th>Tank</th><th>Status</th></tr></thead><tbody id="history"></tbody></table></div></details>
 <h3 class="chart-title">HaulTrack load history</h3><p class="warning">Loading public HaulTrack totals...</p><p class="muted">Company-wide aggregates are separate from timed facility removals.</p><div id="recent-loads"></div>
-</section>
+</details>
 <details class="panel"><summary>Preserved browser drafts from earlier preview</summary><p>Existing drafts are unchanged, unsynced, and excluded from projections. Load entry now belongs in HaulTrack.</p><button id="export">Export preserved drafts</button><p id="export-status" role="status"></p><div id="drafts"></div></details>
 <details class="panel"><summary>Preview test scenarios</summary><p class="muted">All scenarios use synthetic reports and make no backend calls.</p><label>Scenario<select id="scenario"><option value="overview">Overview: Durham current / Rock Creek stale</option><option value="near">Both hoppers near capacity</option><option value="imbalance">One near full / one low</option><option value="paused">No positive flow</option><option value="pending">Ticket awaiting review</option><option value="delayed">Delayed ticket upload</option><option value="feeding">Both facilities feeding</option><option value="off">Feeding off</option><option value="loads">Loads between and after readings</option><option value="stale">Both reports stale</option><option value="missing">Missing Rock Creek</option><option value="empty">No reports</option><option value="invalid">Invalid report</option><option value="out-of-order">Out-of-order readings</option><option value="full">One hopper over capacity</option><option value="future">Future timestamp</option></select></label></details>
 </main>

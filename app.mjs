@@ -35,7 +35,8 @@ if(liveMode){
 }else document.querySelector('.dev').textContent='DEVELOPMENT PREVIEW · Synthetic reports · Live writes disabled';
 
 function renderFacilities(){
-  const opened=new Set([...document.querySelectorAll(".facility[data-plant] details[open]")].map(el=>el.closest(".facility").dataset.plant));
+  const opened=new Set([...document.querySelectorAll('.facility details[open]')].map(el=>el.dataset.disclosure));
+  const focused=document.activeElement?.closest('.facility summary')?.parentElement.dataset.disclosure;
   $('data-error').textContent=dataError;$('data-error').hidden=!dataError;
   $('facilities').innerHTML=Object.entries(data).map(([facility,rows])=>{
     const latest=rows.at(-1);
@@ -53,12 +54,12 @@ function renderFacilities(){
       ? `Holding the reported inventory less ${fmt(estimate.removed)} lb hauled since the report. Assumes feeding has remained off.`
       : `Estimated production: ${fmt(estimate.rate)} lb/hour. Added back ${fmt(estimate.addedBack)} lb hauled between readings; subtracted ${fmt(estimate.removed)} lb hauled since the latest report.`;
     return `<article class="facility" data-plant="${facility}">
-      <div class="heading"><small>${facility} / SOURCE REPORT</small><span class="pill ${stale||future?'attention':''}">${future?'Check timestamp':stale?'Stale report':'Within report window'}</span></div>
+      <div class="heading"><small>${facility} / SOURCE REPORT</small><span class="pill ${stale||future?'attention':''}">${future?'Check timestamp':stale?'Stale report':'Current report'}</span></div>
       <h3>${names[facility]}</h3><p class="muted source-time" data-measured-at="${latest.ts}">Reported ${stamp(latest.ts)}${future?'':` · ${age} minutes ago`}</p>
       ${stale||future?`<p class="warning">${future?'Source timestamp is in the future.':'Report overdue.'} Confirm site conditions before dispatch.</p>`:''}
       <div class="hoppers">${[latest.h1,latest.h2].map((weight,i)=>{
         const pct=weight/CAPACITY[facility][i]*100;
-        return `<div><small>HOPPER ${i+1}</small><div class="weight">${fmt(weight)} <span>lb</span></div><div class="bar"><i class="${pct>=80?'high':''}" style="width:${Math.min(pct,100)}%"></i></div><p>${pct.toFixed(1)}% full</p><p class="muted">Capacity ${fmt(CAPACITY[facility][i])} lb</p>${pct>=80?`<p class="warning">${pct>=100?'At / above capacity':'High fill — plan pickup'}</p>`:''}</div>`;
+        return `<div><small>HOPPER ${i+1}</small><div class="weight">${fmt(weight)} <span>lb</span></div><div class="bar"><i class="${pct>=80?'high':''}" style="width:${Math.min(pct,100)}%"></i></div><p class="hopper-meta">${pct.toFixed(1)}% · ${fmt(CAPACITY[facility][i])} lb max</p>${pct>=80?`<p class="warning">${pct>=100?'At / above capacity':'High fill'}</p>`:''}</div>`;
       }).join('')}</div>
       ${timing}
       ${feedTankHTML(facility,rows,Date.now(),{sourceReadFailed:!!dataError})}
@@ -66,7 +67,39 @@ function renderFacilities(){
       ${liveMode?`<p class="muted">Reported weights above are unchanged by estimates. Source email time is a proxy, not exact sensor telemetry. Daily company-wide totals are never deducted from these weights.</p>`:`<div class="estimate"><small>COMBINED ESTIMATE · NOT LIVE TELEMETRY</small><p>${estimate.reason||`<strong>${fmt(estimate.total)} lb</strong> estimated now`}</p><p class="muted">${explanation}</p><p class="muted">Actual confirmed removals are applied once; past hauling does not promise future pickups. One full hopper is an early warning, not a facility shutdown.</p></div>`}
     </article>`;
   }).join('');
-  document.querySelectorAll('.facility[data-plant] details').forEach(el=>{el.open=opened.has(el.closest('.facility').dataset.plant);});
+  compactFacilities();
+  document.querySelectorAll('.facility details').forEach(el=>{el.open=opened.has(el.dataset.disclosure);});
+  if(focused)document.querySelector('[data-disclosure="'+focused+'"] > summary')?.focus({preventScroll:true});
+}
+
+// Presentation only: retain the full safety explanations in native disclosures.
+function compactFacilities(){
+ document.querySelectorAll('.facility[data-plant]').forEach(card=>{
+  const plant=card.dataset.plant;
+  const details=document.createElement('details');details.className='operation-details';details.dataset.disclosure=plant+'-methods';
+  const summary=document.createElement('summary');summary.textContent='Details & assumptions';details.append(summary);
+  card.querySelectorAll('.shutdown-projection').forEach(box=>{
+   [...box.children].forEach(el=>{
+    if(el.matches('p.flow-rate,small,.eta,.eta-date,.warning'))return;
+    details.append(el);
+   });
+  });
+  card.querySelectorAll('.tank-projection').forEach(box=>{
+   const label=box.querySelector('small');label.textContent='PROJECTED SHUTDOWN · TANK LOW';
+   const paragraphs=[...box.children].filter(el=>el.tagName==='P');
+   paragraphs.forEach((el,i)=>{
+    if(i===0){el.classList.add('tank-level');return;}
+    if(i===1||el.matches('.warning'))return; // timing withheld / check-site reasons stay visible
+    if(el.textContent.startsWith('PROVISIONAL')){
+     const badge=document.createElement('p');badge.className='tank-quality';badge.textContent=box.textContent.includes('More than 24 hours')?'Provisional · >24h, especially uncertain':'Provisional · net level trend';box.insertBefore(badge,el);
+    }
+    details.append(el);
+   });
+  });
+  [...card.children].filter(el=>el.matches('p.muted:not(.source-time),.estimate')).forEach(el=>details.append(el));
+  details.querySelectorAll('details').forEach((el,i)=>el.dataset.disclosure=plant+'-nested-'+i);
+  card.append(details);
+ });
 }
 
 function renderDetails(){
