@@ -5,3 +5,5 @@
 
 /* Operations first: reported weights, flow and shutdown before secondary details. */
 header{padding-bottom:12px}main{padding-top:8px}.flow-rate{margin:0 0 18px}.flow-rate small{display:block}.flow-rate strong{display:block;font-size:25px;line-height:1.3;margin-top:5px;overflow-wrap:anywhere}.flow-rate strong span{font-size:15px;font-weight:500}@media(max-width:700px){header{padding-top:12px;padding-bottom:8px}.facilities{margin-top:12px}.hoppers{margin:16px 0}.flow-rate strong{font-size:24px}}
+
+.tank-projection{border:1px solid #b5cbd9;background:#edf4fa;border-radius:10px;padding:18px;margin:18px 0}.tank-projection .tank-eta{font-size:23px;font-weight:700;line-height:1.3;margin:10px 0}.tank-projection.urgent{background:#ffe3dd;border-color:#d77e6b}

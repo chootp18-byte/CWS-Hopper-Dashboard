@@ -5,6 +5,7 @@ import {readCurrentCWS} from './readings-api.mjs';
 import {readHaulSummary} from './haul-summary.mjs';
 import {readFacilityForecast} from './facility-forecast.mjs';
 import {forecastHTML} from './forecast-view.mjs';
+import {feedTankHTML} from './feed-tank-forecast.mjs';
 
 const $=id=>document.getElementById(id);
 const fmt=n=>Math.round(n).toLocaleString('en-US');
@@ -60,6 +61,7 @@ function renderFacilities(){
         return `<div><small>HOPPER ${i+1}</small><div class="weight">${fmt(weight)} <span>lb</span></div><div class="bar"><i class="${pct>=80?'high':''}" style="width:${Math.min(pct,100)}%"></i></div><p>${pct.toFixed(1)}% full</p><p class="muted">Capacity ${fmt(CAPACITY[facility][i])} lb</p>${pct>=80?`<p class="warning">${pct>=100?'At / above capacity':'High fill — plan pickup'}</p>`:''}</div>`;
       }).join('')}</div>
       ${timing}
+      ${feedTankHTML(facility,rows,Date.now(),{sourceReadFailed:!!dataError})}
       <p class="muted">At report time: <strong>${latest.feeding?'feeding':'not feeding'}</strong> · Feed tank ${latest.feedTank.toFixed(1)} ft</p>
       ${liveMode?`<p class="muted">Reported weights above are unchanged by estimates. Source email time is a proxy, not exact sensor telemetry. Daily company-wide totals are never deducted from these weights.</p>`:`<div class="estimate"><small>COMBINED ESTIMATE · NOT LIVE TELEMETRY</small><p>${estimate.reason||`<strong>${fmt(estimate.total)} lb</strong> estimated now`}</p><p class="muted">${explanation}</p><p class="muted">Actual confirmed removals are applied once; past hauling does not promise future pickups. One full hopper is an early warning, not a facility shutdown.</p></div>`}
     </article>`;
