@@ -1,4 +1,4 @@
-// Prepared for the reviewed V4 public contract. Not imported by the live UI yet.
+// Strict public V4 adapter, including operating-threshold overshoot scenarios.
 // No credentials, ticket rows or backend writes. Caller must explicitly request a read.
 import {CAPACITY, STALE_MS} from './core.mjs';
 export const FORECAST_URL='https://cxpexzfwzpggmtlkwone.supabase.co/functions/v1/cws-facility-forecast';
@@ -14,14 +14,14 @@ const strings=x=>Array.isArray(x)&&x.length<=30&&x.every(s=>typeof s==='string'&
 const buckets=x=>Object.fromEntries(['confirmed','estimated','pending'].map(k=>[k,{ticketCount:count(x?.[k]?.ticketCount),loadCount:count(x?.[k]?.loadCount),netLb:number(x?.[k]?.netLb)}]));
 const assumptions=['source-email-timestamp-is-inventory-measurement-time','inventory-and-ticket-net-pounds-assumed-comparable','measured-inventory-includes-removals-through-measurement','production-continues-at-inferred-rate','no-future-hauls-assumed'];
 
-function scenario(x,threshold,sensitivity=false){
+function scenario(x,threshold,target,sensitivity=false){
   if(x===null)return null;
   const f=x?.full;
   if(!f||f.thresholdLb!==threshold||!['conditional','beyond-horizon','modeled-threshold-crossed'].includes(f.status))fail();
   if(f.status==='conditional'&&(!(number(f.hours)>0)||f.hours>24||!time(f.at)))fail();
   if(f.status==='beyond-horizon'&&(f.hours!==null||f.at!==null))fail();
   if(f.status==='modeled-threshold-crossed'&&(!sensitivity||x.inventoryLb!==null||f.hours!==0||!time(f.at)))fail();
-  if(f.status!=='modeled-threshold-crossed'&&number(x.inventoryLb)>=threshold)fail();
+  if(f.status!=='modeled-threshold-crossed'&&number(x.inventoryLb)>=target)fail();
   // Per-hopper redirect estimates are deliberately not exposed by this adapter.
   return {inventoryLb:x.inventoryLb,full:{thresholdLb:threshold,status:f.status,hours:f.hours,at:f.at}};
 }
@@ -39,15 +39,22 @@ export function parseFacilityForecast(body){
     const reportedAt=nullableTime(f.measuredAt),rateWindowStart=nullableTime(f.rateWindowStart);
     const measuredHoppersLb=f.measuredHoppersLb===null?null:{h1:number(f.measuredHoppersLb?.h1),h2:number(f.measuredHoppersLb?.h2)};
     const reportedInventoryLb=f.measuredInventoryLb===null?null:number(f.measuredInventoryLb);
-    if(measuredHoppersLb&&Math.abs(measuredHoppersLb.h1+measuredHoppersLb.h2-reportedInventoryLb)>.01)fail();
+    if(measuredHoppersLb&&(reportedInventoryLb===null||!Number.isFinite(measuredHoppersLb.h1+measuredHoppersLb.h2)||Math.abs(measuredHoppersLb.h1+measuredHoppersLb.h2-reportedInventoryLb)>.01))fail();
+    const target=measuredHoppersLb?number(reportedInventoryLb+Math.max(0,limits[0]-measuredHoppersLb.h1)+Math.max(0,limits[1]-measuredHoppersLb.h2)):limits[0]+limits[1];
+    const overage=measuredHoppersLb&&(measuredHoppersLb.h1>limits[0]||measuredHoppersLb.h2>limits[1]);
     const reasons=strings(f.reasons),warnings=strings(f.warnings),rateWindowHauls=buckets(f.rateWindowHauls),postAnchor=buckets(f.postAnchor);
     if(!['insufficient-post-protocol-history','single-interval-provisional','two-interval-comparison'].includes(f.historyQuality)||f.noCreditBasis!=='same-inferred-rate; no-credit-for-pending-or-approximate-post-anchor-removals; not-a-guaranteed-bound')fail();
-    const expected=scenario(f.expected,limits[0]+limits[1]),noCredit=scenario(f.noApproximateRemovalCredit,limits[0]+limits[1],true);
+    const expected=scenario(f.expected,limits[0]+limits[1],target),noCredit=scenario(f.noApproximateRemovalCredit,limits[0]+limits[1],target,true);
     const rate=f.productionLbPerHour===null?null:number(f.productionLbPerHour);
     if(f.status==='unavailable'&&(expected!==null||noCredit!==null||rate!==null))fail();
     if(f.status!=='unavailable'){
       if(!expected||!noCredit||!(rate>0)||reasons.length||!reportedAt||!rateWindowStart||!measuredHoppersLb||Date.parse(rateWindowStart)<Date.parse(CUTOVER)||Date.parse(rateWindowStart)>=Date.parse(reportedAt)||Date.parse(reportedAt)>Date.parse(generatedAt))fail();
       if(f.status==='conditional'&&(f.historyQuality!=='two-interval-comparison'||postAnchor.pending.ticketCount+rateWindowHauls.pending.ticketCount+postAnchor.estimated.ticketCount+rateWindowHauls.estimated.ticketCount>0))fail();
+      if(overage&&Object.values(postAnchor).some(b=>b.ticketCount>0||b.loadCount>0||b.netLb>0))fail();
+      for(const s of [expected,noCredit]){
+        if(s.full.status==='conditional'&&Math.abs((target-s.inventoryLb)/rate-s.full.hours)>1e-8)fail();
+        if(s.full.status==='beyond-horizon'&&(target-s.inventoryLb)/rate<=24)fail();
+      }
       for(const s of [expected,noCredit])if(s.full.status==='conditional'&&Math.abs(Date.parse(s.full.at)-Date.parse(generatedAt)-s.full.hours*3600000)>2)fail();
     }
     const observedBothFull=measuredHoppersLb?measuredHoppersLb.h1>=limits[0]&&measuredHoppersLb.h2>=limits[1]:null;
