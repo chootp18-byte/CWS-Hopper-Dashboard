@@ -8,7 +8,7 @@ export function bothFullProjection(rows, capacity, now, loads=[], coverage='unkn
   if(latest.ts>now)return {reason:'Source timestamp is in the future'};
   if(now-latest.ts>STALE_MS)return {reason:'Stale report — timing unavailable'};
   if(latest.h1>=capacity[0]&&latest.h2>=capacity[1])return {atCapacity:true,reason:'Both measured hoppers at confirmed full limits — check site status now'};
-  if(latest.h1>capacity[0]||latest.h2>capacity[1])return {reason:'A reading exceeds its confirmed full limit — verify the reading before projecting'};
+  const overage=Math.max(0,latest.h1-capacity[0])+Math.max(0,latest.h2-capacity[1]);
   if(!latest.feeding)return {reason:'Feeding was off — no positive-flow ETA'};
   if(coverage!=='verified-fixture')return {reason:'Load coverage or ticket review incomplete — timing unavailable'};
   if(routing!=='redirect')return {reason:'Flow routing after first hopper fills is unconfirmed'};
@@ -16,7 +16,9 @@ export function bothFullProjection(rows, capacity, now, loads=[], coverage='unkn
   const estimate=forecast(rows,now,loads);
   if(estimate.reason)return {reason:estimate.reason};
   if(!(estimate.rate>0))return {reason:'No positive production rate — timing unavailable'};
-  const remaining=capacity[0]+capacity[1]-estimate.total;
+  if(overage>0&&estimate.removed>0)return {reason:'Pickup hopper allocation needed after an above-threshold report'};
+  const roomAtReport=Math.max(0,capacity[0]-latest.h1)+Math.max(0,capacity[1]-latest.h2);
+  const remaining=roomAtReport-(estimate.total-latest.h1-latest.h2);
   const bothAt=now+remaining/estimate.rate*3600000;
   return {bothAt,rate:estimate.rate,remaining:Math.max(0,remaining),hours:Math.max(0,remaining/estimate.rate),addedBack:estimate.addedBack,removed:estimate.removed,reached:remaining<=0,projectionOnly:true};
 }

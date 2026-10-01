@@ -59,7 +59,7 @@ function renderFacilities(){
       ${stale||future?`<p class="warning">${future?'Source timestamp is in the future.':'Report overdue.'} Confirm site conditions before dispatch.</p>`:''}
       <div class="hoppers">${[latest.h1,latest.h2].map((weight,i)=>{
         const pct=weight/CAPACITY[facility][i]*100;
-        return `<div><small>HOPPER ${i+1}</small><div class="weight">${fmt(weight)} <span>lb</span></div><div class="bar"><i class="${pct>=80?'high':''}" style="width:${Math.min(pct,100)}%"></i></div><p class="hopper-meta">${pct.toFixed(1)}% · ${fmt(CAPACITY[facility][i])} lb max</p>${pct>=80?`<p class="warning">${pct>=100?'At / above capacity':'High fill'}</p>`:''}</div>`;
+        return `<div><small>HOPPER ${i+1}</small><div class="weight">${fmt(weight)} <span>lb</span></div><div class="bar"><i class="${pct>=80?'high':''}" style="width:${Math.min(pct,100)}%"></i></div><p class="hopper-meta">${pct.toFixed(1)}% · ${fmt(CAPACITY[facility][i])} lb full</p>${pct>=80?`<p class="warning">${pct>=100?'At / above full threshold':'High fill'}</p>`:''}</div>`;
       }).join('')}</div>
       ${timing}
       ${feedTankHTML(facility,rows,Date.now(),{sourceReadFailed:!!dataError})}

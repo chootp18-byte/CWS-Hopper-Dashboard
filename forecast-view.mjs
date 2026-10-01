@@ -11,7 +11,7 @@ function reasonText(reason=''){
   if(reason.includes('anchors differ'))return 'Report and forecast are updating — waiting for matching source reports.';
   if(reason.includes('refresh')||reason.includes('clock'))return 'Forecast needs a fresh update. Check your device clock if this continues.';
   if(reason.includes('modeled-full-threshold')||reason.includes('interval-modeled-full'))return 'The model reached the full threshold. Confirm site conditions; further production is unknown.';
-  if(reason.includes('over-threshold'))return 'A hopper report exceeds its full operating limit. Confirm the reading and routing before using an estimate.';
+  if(reason.includes('over-threshold'))return 'Load-adjusted forecast paused by the server after an above-threshold report; reported weights remain valid.';
   if(reason.includes('feeding'))return 'Feeding is stopped or unconfirmed — timing paused.';
   if(reason.includes('noisy')||reason.includes('nonpositive'))return 'Recent reports do not establish a consistent positive production rate.';
   if(reason.includes('negative')||reason.includes('balance'))return 'Reported inventory and load timing do not balance. Timing paused for review.';
@@ -20,13 +20,14 @@ function reasonText(reason=''){
 }
 export function forecastHTML(parsed,facility,report,now=Date.now(),{allowPreliminary=true}={}){
   const f=selectFacilityForecast(parsed,facility,report,now),active=f.status!=='unavailable';
-  const preliminary=!active&&allowPreliminary?preliminaryForecast(facility,report,now):null;
+  const both=report&&report.h1>=(facility==='DM'?129000:105000)&&report.h2>=(facility==='DM'?130000:109000);
+  const preliminary=!both&&!active&&allowPreliminary?preliminaryForecast(facility,report,now):null;
   if(preliminary?.status==='preliminary'){
     const minutes=preliminary.secondsRemaining===null?null:Math.ceil(preliminary.secondsRemaining/60);
     return `<div class="shutdown-projection ${preliminary.thresholdTimeReached?'urgent':''}" data-forecast-basis="reported-production"><p class="flow-rate"><small>REPORTED PRODUCTION RATE</small><strong>${reportedRateText(preliminary.rateLbPerHour)} <span>lb/hour</span></strong></p><small>PROJECTED SHUTDOWN · BOTH HOPPERS FULL</small><div class="eta">${preliminary.thresholdTimeReached?'Scenario full time reached':preliminary.fullAt===null?'Beyond the 24-hour scenario window':`${stamp(preliminary.fullAt)}`}</div><p class="eta-date">PRELIMINARY · REPORTED PRODUCTION · ${minutes===null?'Long-range scenario':`${Math.floor(minutes/60)}h ${minutes%60}m remaining`}</p><p>Source report: ${stamp(preliminary.reportedAt)} (Pacific). ${fmt(preliminary.roomAtReportLb)} lb combined room at that report.</p><p class="confidence">Provisional scenario, not load-adjusted. Assumes continuous production at the rate in this report, flow redirected into available room, and <strong>NO pickups since that report or afterward</strong>. Actual pickups can change the outcome. This is not a safe deadline or guaranteed shutdown time.</p><p class="muted">Load-adjusted estimate: ${esc(reasonText(f.reason))}. Source email time is a proxy for inventory time.</p></div>`;
   }
-  const both=report&&report.h1>=(facility==='DM'?129000:105000)&&report.h2>=(facility==='DM'?130000:109000);
-  const title=active?(f.thresholdTimeReached?'Projected full time reached':f.expected.full.at?`${stamp(f.expected.full.at)}`:'Beyond the 24-hour forecast window'):'Timing unavailable';
+
+  const title=both?'Both hoppers full in report':active?(f.thresholdTimeReached?'Projected full time reached':f.expected.full.at?`${stamp(f.expected.full.at)}`:'Beyond the 24-hour forecast window'):'Timing unavailable';
   const minutes=active&&f.secondsUntilFull!==null?Math.ceil(f.secondsUntilFull/60):null;
   const counts=active?`Pending loads used: ${fmt(f.rateWindowHauls.pending.ticketCount)} in the production interval; ${fmt(f.postAnchor.pending.ticketCount)} after the report.`:'';
   const sensitivity=active?(f.noCredit.full.status==='modeled-threshold-crossed'?`Model crossed at ${stamp(f.noCredit.full.at)}; production afterward is unknown.`:f.noCredit.full.at?`${stamp(f.noCredit.full.at)}`:'Beyond 24 hours'):'';

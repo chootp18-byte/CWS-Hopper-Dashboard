@@ -6,7 +6,6 @@ export function preliminaryForecast(facility,report,now=Date.now()){
   if(!cap||!report||![report.ts,report.h1,report.h2,now].every(Number.isFinite)||report.h1<0||report.h2<0)return unavailable('Missing or invalid source report');
   if(report.ts>now)return unavailable('Source report is future-dated');
   if(now-report.ts>STALE_MS)return unavailable('Source report is stale');
-  if(report.h1>cap[0]||report.h2>cap[1])return unavailable('Reported hopper exceeds its operating limit; confirm conditions');
   if(report.feeding!==true)return unavailable('Feeding stopped or unconfirmed');
   if(report.productionRateBasis!=='source-email'||report.productionRateReportedAt!==report.ts||typeof report.reportedProductionLbPerHour!=='number'||!Number.isFinite(report.reportedProductionLbPerHour))return unavailable('Reported production rate missing or not matched to this report');
   const rate=report.reportedProductionLbPerHour;
