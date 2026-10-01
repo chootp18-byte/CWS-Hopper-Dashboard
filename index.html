@@ -22,7 +22,7 @@
 <div class="heading">
 <div>
 <h2>Know what’s on site.</h2>
-<p>Measured weights first. Estimates shown separately.</p>
+<p>Reported weights first. Estimates shown separately.</p>
 </div>
 <button id="refresh">Refresh data</button>
 </div>
@@ -30,14 +30,14 @@
 </p>
 <section id="facilities" class="facilities" aria-label="Facility measurements">
 </section>
-<p class="footnote">Report cadence: every 2 hours. Stale after 2 hours 30 minutes. Full-capacity limits confirmed by the user: Durham 129,000 / 130,000 lb; Rock Creek 105,000 / 109,000 lb. Times display in your device timezone.</p>
+<p class="footnote">Report cadence: every 2 hours. Stale after 2 hours 30 minutes. Full operating limits confirmed by the user: Durham 129,000 / 130,000 lb; Rock Creek 105,000 / 109,000 lb. Times display in your device timezone.</p>
 <p id="data-error" class="warning" role="alert" hidden></p>
 <section class="panel" id="trends">
-<div class="heading"><div><small>MEASURED HISTORY</small><h2><span id="detail-name">Durham</span> trends &amp; loads</h2></div><div class="facility-tabs" role="group" aria-label="History facility"><button data-facility="DM" aria-pressed="true">Durham</button><button data-facility="RC" aria-pressed="false">Rock Creek</button></div></div>
+<div class="heading"><div><small>REPORT HISTORY</small><h2><span id="detail-name">Durham</span> trends &amp; loads</h2></div><div class="facility-tabs" role="group" aria-label="History facility"><button data-facility="DM" aria-pressed="true">Durham</button><button data-facility="RC" aria-pressed="false">Rock Creek</button></div></div>
 <p id="chart-range" class="muted"></p>
 <div class="chart-grid"><div><h3 class="chart-title">Hopper weights <span class="muted">lb</span></h3><div id="weight-chart" class="chart"></div><p class="legend"><span>● Hopper 1</span><span>● Hopper 2</span><span class="muted">Dashed lines: capacity</span></p></div><div><h3 class="chart-title">Feed tank <span class="muted">ft</span></h3><div id="tank-chart" class="chart"></div><p class="muted">Shutdown forecast unavailable. Tank level alone does not establish a reliable depletion rate or confirmed shutdown threshold.</p></div></div>
-<p class="muted">Lines connect measured reports; they are not continuous telemetry. Load-outs can explain downward steps. Exact measurements are below.</p>
-<details open><summary>Recent measured readings</summary><div class="table-wrap"><table><thead><tr><th>Measured at</th><th>H1 lb</th><th>H2 lb</th><th>Change lb</th><th>Hauled between reports lb</th><th>Tank</th><th>Status</th></tr></thead><tbody id="history"></tbody></table></div></details>
+<p class="muted">Lines connect source reports; they are not continuous telemetry. Load-outs can explain downward steps. Reported values are below.</p>
+<details open><summary>Recent reported readings</summary><div class="table-wrap"><table><thead><tr><th>Reported at</th><th>H1 lb</th><th>H2 lb</th><th>Change lb</th><th>Hauled between reports lb</th><th>Tank</th><th>Status</th></tr></thead><tbody id="history"></tbody></table></div></details>
 <h3 class="chart-title">HaulTrack load history</h3><p class="warning">Loading public HaulTrack totals...</p><p class="muted">Company-wide aggregates are separate from timed facility removals.</p><div id="recent-loads"></div>
 </section>
 <details class="panel"><summary>Preserved browser drafts from earlier preview</summary><p>Existing drafts are unchanged, unsynced, and excluded from projections. Load entry now belongs in HaulTrack.</p><button id="export">Export preserved drafts</button><p id="export-status" role="status"></p><div id="drafts"></div></details>

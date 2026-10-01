@@ -3,6 +3,8 @@ import {makeFixture} from './fixtures.mjs';
 import {trendSVG} from './charts.mjs';
 import {readCurrentCWS} from './readings-api.mjs';
 import {readHaulSummary} from './haul-summary.mjs';
+import {readFacilityForecast} from './facility-forecast.mjs';
+import {forecastHTML} from './forecast-view.mjs';
 
 const $=id=>document.getElementById(id);
 const fmt=n=>Math.round(n).toLocaleString('en-US');
@@ -18,6 +20,7 @@ try {const stored=Number(sessionStorage.getItem('cws-fixture-anchor'));if(stored
 const fixture=makeFixture(scenario,anchor);
 if(liveMode){fixture.readings=[];fixture.loads=[];fixture.coverage='unknown';}
 let data={DM:[],RC:[]},dataError='';
+let facilityForecast=null;
 let haulSummary=null,haulSummaryStatus='Fetching public HaulTrack totals…';
 try {data=normalize(fixture.readings);} catch {dataError='Report validation failed. Invalid readings are withheld; do not dispatch using this preview scenario.';}
 const loads=fixture.loads;
@@ -31,10 +34,11 @@ if(liveMode){
 }else document.querySelector('.dev').textContent='DEVELOPMENT PREVIEW · Synthetic reports · Live writes disabled';
 
 function renderFacilities(){
+  const opened=new Set([...document.querySelectorAll(".facility[data-plant] details[open]")].map(el=>el.closest(".facility").dataset.plant));
   $('data-error').textContent=dataError;$('data-error').hidden=!dataError;
   $('facilities').innerHTML=Object.entries(data).map(([facility,rows])=>{
     const latest=rows.at(-1);
-    if(!latest)return `<article class="facility"><small>${facility} / MEASURED REPORT</small><h3>${names[facility]}</h3><p class="warning">No valid measured report available.</p><p>Estimates unavailable. Check the report source.</p></article>`;
+    if(!latest)return `<article class="facility"><small>${facility} / SOURCE REPORT</small><h3>${names[facility]}</h3><p class="warning">No valid measured report available.</p><p>Estimates unavailable. Check the report source.</p></article>`;
     const age=Math.floor((Date.now()-latest.ts)/60000);
     const stale=Date.now()-latest.ts>STALE_MS,future=age<0;
     const facilityLoads=loads.filter(l=>l.facility===facility);
@@ -42,13 +46,14 @@ function renderFacilities(){
     const projection=bothFullProjection(rows,CAPACITY[facility],Date.now(),facilityLoads,fixture.coverage,'redirect');
     const minutes=projection.hours===undefined?null:Math.max(0,Math.round(projection.hours*12)*5);
     const countdown=minutes===null?'':minutes>=60?`${Math.floor(minutes/60)}h ${minutes%60}m remaining`:`${minutes} minutes remaining`;
-    const timing=`<div class="shutdown-projection ${projection.reached||projection.atCapacity?'urgent':minutes!==null&&minutes<=120?'soon':''}"><small>PROJECTED SHUTDOWN · BOTH HOPPERS FULL</small><div class="eta">${projection.reason?'Timing unavailable':projection.reached?'May already be full':`About ${new Date(projection.bothAt).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}`}</div><p class="eta-date">${projection.reason?escape(projection.reason):`${new Date(projection.bothAt).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})} · ${countdown}`}</p><p><strong>${projection.rate?fmt(projection.rate)+' lb/hour estimated production':'Production estimate unavailable'}</strong></p><p class="muted">${projection.remaining!==undefined?fmt(projection.remaining)+' lb combined space estimated now. ':''}Flow can redirect to the hopper with room. Assumes current production continues and <strong>no additional future haul-outs</strong>.</p><p class="confidence">${projection.reason?'Insufficient current evidence':'Conditional estimate — not a guaranteed shutdown time'}. Full-capacity limits confirmed by the user. Synthetic load coverage only; HaulTrack is not connected.</p></div>`;
+    let timing=`<div class="shutdown-projection ${projection.reached||projection.atCapacity?'urgent':minutes!==null&&minutes<=120?'soon':''}"><small>PROJECTED SHUTDOWN · BOTH HOPPERS FULL</small><div class="eta">${projection.reason?'Timing unavailable':projection.reached?'May already be full':`About ${new Date(projection.bothAt).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}`}</div><p class="eta-date">${projection.reason?escape(projection.reason):`${new Date(projection.bothAt).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})} · ${countdown}`}</p><p><strong>${projection.rate?fmt(projection.rate)+' lb/hour estimated production':'Production estimate unavailable'}</strong></p><p class="muted">${projection.remaining!==undefined?fmt(projection.remaining)+' lb combined space estimated now. ':''}Flow can redirect to the hopper with room. Assumes current production continues and <strong>no additional future haul-outs</strong>.</p><p class="confidence">${projection.reason?'Insufficient current evidence':'Conditional estimate — not a guaranteed shutdown time'}. Full-capacity limits confirmed by the user. Synthetic load coverage only; HaulTrack is not connected.</p></div>`;
+    if(liveMode)timing=forecastHTML(facilityForecast,facility,latest);
     const explanation=estimate.reason ? 'The measured report above is unchanged.' : estimate.mode==='off'
       ? `Holding the reported inventory less ${fmt(estimate.removed)} lb hauled since the report. Assumes feeding has remained off.`
       : `Estimated production: ${fmt(estimate.rate)} lb/hour. Added back ${fmt(estimate.addedBack)} lb hauled between readings; subtracted ${fmt(estimate.removed)} lb hauled since the latest report.`;
-    return `<article class="facility">
-      <div class="heading"><small>${facility} / MEASURED REPORT</small><span class="pill ${stale||future?'attention':''}">${future?'Check timestamp':stale?'Stale report':'Within report window'}</span></div>
-      <h3>${names[facility]}</h3><p class="muted source-time" data-measured-at="${latest.ts}">Measured ${stamp(latest.ts)}${future?'':` · ${age} minutes ago`}</p>
+    return `<article class="facility" data-plant="${facility}">
+      <div class="heading"><small>${facility} / SOURCE REPORT</small><span class="pill ${stale||future?'attention':''}">${future?'Check timestamp':stale?'Stale report':'Within report window'}</span></div>
+      <h3>${names[facility]}</h3><p class="muted source-time" data-measured-at="${latest.ts}">Reported ${stamp(latest.ts)}${future?'':` · ${age} minutes ago`}</p>
       ${stale||future?`<p class="warning">${future?'Source timestamp is in the future.':'Report overdue.'} Confirm site conditions before dispatch.</p>`:''}
       ${timing}
       <div class="hoppers">${[latest.h1,latest.h2].map((weight,i)=>{
@@ -56,10 +61,10 @@ function renderFacilities(){
         return `<div><small>HOPPER ${i+1}</small><div class="weight">${fmt(weight)} <span>lb</span></div><div class="bar"><i class="${pct>=80?'high':''}" style="width:${Math.min(pct,100)}%"></i></div><p>${pct.toFixed(1)}% full</p><p class="muted">Capacity ${fmt(CAPACITY[facility][i])} lb</p>${pct>=80?`<p class="warning">${pct>=100?'At / above capacity':'High fill — plan pickup'}</p>`:''}</div>`;
       }).join('')}</div>
       <p class="muted">At report time: <strong>${latest.feeding?'feeding':'not feeding'}</strong> · Feed tank ${latest.feedTank.toFixed(1)} ft</p>
-      <div class="estimate"><small>COMBINED ESTIMATE · NOT LIVE TELEMETRY</small><p>${estimate.reason||`<strong>${fmt(estimate.total)} lb</strong> estimated now`}</p><p class="muted">${explanation}</p><p class="muted">Actual confirmed removals are applied once; past hauling does not promise future pickups. One full hopper is an early warning, not a facility shutdown.</p></div>
+      ${liveMode?`<p class="muted">Reported weights above are unchanged by estimates. Source email time is a proxy, not exact sensor telemetry. Daily company-wide totals are never deducted from these weights.</p>`:`<div class="estimate"><small>COMBINED ESTIMATE · NOT LIVE TELEMETRY</small><p>${estimate.reason||`<strong>${fmt(estimate.total)} lb</strong> estimated now`}</p><p class="muted">${explanation}</p><p class="muted">Actual confirmed removals are applied once; past hauling does not promise future pickups. One full hopper is an early warning, not a facility shutdown.</p></div>`}
     </article>`;
   }).join('');
-  if(liveMode)document.querySelectorAll('.confidence').forEach(el=>{el.textContent='HaulTrack totals lack confirmed pickup facility/loading times: shutdown ETA is withheld. Daily totals are not deducted from hopper weights. Full-capacity limits confirmed by the user.';});
+  document.querySelectorAll('.facility[data-plant] details').forEach(el=>{el.open=opened.has(el.closest('.facility').dataset.plant);});
 }
 
 function renderDetails(){
@@ -67,7 +72,7 @@ function renderDetails(){
   $('detail-name').textContent=names[detailFacility];
   $('weight-chart').innerHTML=trendSVG(rows,cap);
   $('tank-chart').innerHTML=trendSVG(rows,cap,'tank');
-  $('chart-range').textContent=rows.length?`${stamp(rows[0].ts)} to ${stamp(rows.at(-1).ts)} · ${rows.length} measured reports`:'No valid reports';
+  $('chart-range').textContent=rows.length?`${stamp(rows[0].ts)} to ${stamp(rows.at(-1).ts)} · ${rows.length} source reports`:'No valid reports';
   $('history').innerHTML=rows.map((row,i)=>{
     const prev=rows[i-1],delta=prev?row.h1+row.h2-prev.h1-prev.h2:null;
     const removed=prev?intervalLoads(loads.filter(l=>l.facility===detailFacility&&l.state==='confirmed-fixture'),prev.ts,row.ts):0;
@@ -79,7 +84,7 @@ function renderDetails(){
     $('recent-loads').textContent=haulSummaryStatus;
     if(haulSummary){
       $('recent-loads').previousElementSibling.textContent='Sanitized company-wide totals only; no driver, ticket photo, Field ID or raw ticket information.';
-      $('recent-loads').previousElementSibling.previousElementSibling.textContent='HaulTrack aggregate totals connected. Facility-timed load coverage is still unavailable.';
+      $('recent-loads').previousElementSibling.previousElementSibling.textContent='HaulTrack aggregate totals connected. Facility estimates use a separate report-and-load calculation with their own quality checks.';
       const recorded=bucket=>`${bucket.recordedNetLb===null?'Unavailable / quarantined':fmt(bucket.recordedNetLb)+' lb'}<br><small>${fmt(bucket.acceptedWeightTicketCount)} accepted / ${fmt(bucket.excludedWeightTicketCount)} excluded${bucket.weightStatus==='partial'?' — PARTIAL SUM':''}</small>`;
       const latest=haulSummary.days.at(-1);
       const totals=key=>haulSummary.days.reduce((sum,day)=>({tickets:sum.tickets+day[key].ticketCount,pounds:sum.pounds+(day[key].recordedNetLb??0),available:sum.available+(day[key].recordedNetLb===null?0:day[key].acceptedWeightTicketCount),missing:sum.missing+(day[key].recordedNetLb===null?day[key].acceptedWeightTicketCount:0),excluded:sum.excluded+day[key].excludedWeightTicketCount}),{tickets:0,pounds:0,available:0,missing:0,excluded:0});
@@ -123,8 +128,9 @@ async function refresh(){
   if(liveMode){
     readingRequestActive=true;$('refresh').disabled=true;
     $('checked').textContent='Fetching current CWS readings (read-only)…';
-    const [cws,haul]=await Promise.allSettled([readCurrentCWS(),readHaulSummary()]);
-    if(cws.status==='fulfilled'){data=cws.value;dataError='';$('checked').textContent=`CWS readings fetched ${stamp(Date.now())}. Source measurement timestamps shown below.`;}
+    const [cws,haul,projection]=await Promise.allSettled([readCurrentCWS(),readHaulSummary(),readFacilityForecast()]);
+    facilityForecast=projection.status==='fulfilled'&&cws.status==='fulfilled'?projection.value:null;
+    if(cws.status==='fulfilled'){data=cws.value;dataError='';$('checked').textContent=`CWS readings fetched ${stamp(Date.now())}. Source report timestamps shown below.`;}
     else{dataError='Current CWS feed could not be read or validated. Any prior readings retain their original source times.';$('checked').textContent='CWS refresh failed — no sample data substituted.';}
     if(haul.status==='fulfilled'&&haul.value){haulSummary=haul.value;haulSummaryStatus='';}
     else{haulSummary=null;haulSummaryStatus='HaulTrack totals unavailable or invalid. No totals or sample records substituted; this does not mean zero loads.';}
@@ -134,4 +140,4 @@ async function refresh(){
   renderFacilities();renderDetails();
 }
 $('refresh').addEventListener('click',refresh);window.addEventListener('storage',renderDrafts);
-refresh();renderDrafts();setInterval(renderFacilities,30000);setInterval(refresh,300000);
+refresh();renderDrafts();setInterval(renderFacilities,1000);setInterval(refresh,300000);
