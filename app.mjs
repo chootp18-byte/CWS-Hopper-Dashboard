@@ -55,11 +55,11 @@ function renderFacilities(){
       <div class="heading"><small>${facility} / SOURCE REPORT</small><span class="pill ${stale||future?'attention':''}">${future?'Check timestamp':stale?'Stale report':'Within report window'}</span></div>
       <h3>${names[facility]}</h3><p class="muted source-time" data-measured-at="${latest.ts}">Reported ${stamp(latest.ts)}${future?'':` · ${age} minutes ago`}</p>
       ${stale||future?`<p class="warning">${future?'Source timestamp is in the future.':'Report overdue.'} Confirm site conditions before dispatch.</p>`:''}
-      ${timing}
       <div class="hoppers">${[latest.h1,latest.h2].map((weight,i)=>{
         const pct=weight/CAPACITY[facility][i]*100;
         return `<div><small>HOPPER ${i+1}</small><div class="weight">${fmt(weight)} <span>lb</span></div><div class="bar"><i class="${pct>=80?'high':''}" style="width:${Math.min(pct,100)}%"></i></div><p>${pct.toFixed(1)}% full</p><p class="muted">Capacity ${fmt(CAPACITY[facility][i])} lb</p>${pct>=80?`<p class="warning">${pct>=100?'At / above capacity':'High fill — plan pickup'}</p>`:''}</div>`;
       }).join('')}</div>
+      ${timing}
       <p class="muted">At report time: <strong>${latest.feeding?'feeding':'not feeding'}</strong> · Feed tank ${latest.feedTank.toFixed(1)} ft</p>
       ${liveMode?`<p class="muted">Reported weights above are unchanged by estimates. Source email time is a proxy, not exact sensor telemetry. Daily company-wide totals are never deducted from these weights.</p>`:`<div class="estimate"><small>COMBINED ESTIMATE · NOT LIVE TELEMETRY</small><p>${estimate.reason||`<strong>${fmt(estimate.total)} lb</strong> estimated now`}</p><p class="muted">${explanation}</p><p class="muted">Actual confirmed removals are applied once; past hauling does not promise future pickups. One full hopper is an early warning, not a facility shutdown.</p></div>`}
     </article>`;
