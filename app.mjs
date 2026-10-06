@@ -6,6 +6,7 @@ import {readHaulSummary} from './haul-summary.mjs';
 import {readFacilityForecast} from './facility-forecast.mjs';
 import {forecastHTML} from './forecast-view.mjs';
 import {feedTankHTML} from './feed-tank-forecast.mjs';
+import {feedingStatusHTML} from './feeding-status.mjs';
 
 const $=id=>document.getElementById(id);
 const fmt=n=>Math.round(n).toLocaleString('en-US');
@@ -22,6 +23,7 @@ const fixture=makeFixture(scenario,anchor);
 if(liveMode){fixture.readings=[];fixture.loads=[];fixture.coverage='unknown';}
 let data={DM:[],RC:[]},dataError='';
 let facilityForecast=null;
+let forecastReadFailed=false;
 let haulSummary=null,haulSummaryStatus='Fetching public HaulTrack totals…';
 try {data=normalize(fixture.readings);} catch {dataError='Report validation failed. Invalid readings are withheld; do not dispatch using this preview scenario.';}
 const loads=fixture.loads;
@@ -40,7 +42,7 @@ function renderFacilities(){
   $('data-error').textContent=dataError;$('data-error').hidden=!dataError;
   $('facilities').innerHTML=Object.entries(data).map(([facility,rows])=>{
     const latest=rows.at(-1);
-    if(!latest)return `<article class="facility"><small>${facility} / SOURCE REPORT</small><h3>${names[facility]}</h3><p class="warning">No valid measured report available.</p><p>Estimates unavailable. Check the report source.</p></article>`;
+    if(!latest)return `<article class="facility"><small>${facility} / SOURCE REPORT</small><h3>${names[facility]}</h3>${feedingStatusHTML(null)}<p class="warning">No valid measured report available.</p><p>Estimates unavailable. Check the report source.</p></article>`;
     const age=Math.floor((Date.now()-latest.ts)/60000);
     const stale=Date.now()-latest.ts>STALE_MS,future=age<0;
     const facilityLoads=loads.filter(l=>l.facility===facility);
@@ -49,13 +51,13 @@ function renderFacilities(){
     const minutes=projection.hours===undefined?null:Math.max(0,Math.round(projection.hours*12)*5);
     const countdown=minutes===null?'':minutes>=60?`${Math.floor(minutes/60)}h ${minutes%60}m remaining`:`${minutes} minutes remaining`;
     let timing=`<div class="shutdown-projection ${projection.reached||projection.atCapacity?'urgent':minutes!==null&&minutes<=120?'soon':''}"><small>PROJECTED SHUTDOWN · BOTH HOPPERS FULL</small><div class="eta">${projection.reason?'Timing unavailable':projection.reached?'May already be full':`${new Date(projection.bothAt).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}`}</div><p class="eta-date">${projection.reason?escape(projection.reason):`${new Date(projection.bothAt).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})} · ${countdown}`}</p><p><strong>${projection.rate?fmt(projection.rate)+' lb/hour estimated production':'Production estimate unavailable'}</strong></p><p class="muted">${projection.remaining!==undefined?fmt(projection.remaining)+' lb combined space estimated now. ':''}Flow can redirect to the hopper with room. Assumes current production continues and <strong>no additional future haul-outs</strong>.</p><p class="confidence">${projection.reason?'Insufficient current evidence':'Conditional estimate — not a guaranteed shutdown time'}. Full-capacity limits confirmed by the user. Synthetic load coverage only; HaulTrack is not connected.</p></div>`;
-    if(liveMode)timing=forecastHTML(facilityForecast,facility,latest,Date.now(),{allowPreliminary:!dataError});
+    if(liveMode)timing=forecastHTML(facilityForecast,facility,latest,Date.now(),{allowPreliminary:!dataError&&!forecastReadFailed});
     const explanation=estimate.reason ? 'The measured report above is unchanged.' : estimate.mode==='off'
       ? `Holding the reported inventory less ${fmt(estimate.removed)} lb hauled since the report. Assumes feeding has remained off.`
       : `Estimated production: ${fmt(estimate.rate)} lb/hour. Added back ${fmt(estimate.addedBack)} lb hauled between readings; subtracted ${fmt(estimate.removed)} lb hauled since the latest report.`;
     return `<article class="facility" data-plant="${facility}">
       <div class="heading"><small>${facility} / SOURCE REPORT</small><span class="pill ${stale||future?'attention':''}">${future?'Check timestamp':stale?'Stale report':'Current report'}</span></div>
-      <h3>${names[facility]}</h3><p class="muted source-time" data-measured-at="${latest.ts}">Reported ${stamp(latest.ts)}${future?'':` · ${age} minutes ago`}</p>
+      <h3>${names[facility]}</h3>${feedingStatusHTML(latest,Date.now(),!!dataError)}<p class="muted source-time" data-measured-at="${latest.ts}">Reported ${stamp(latest.ts)}${future?'':` · ${age} minutes ago`}</p>
       ${stale||future?`<p class="warning">${future?'Source timestamp is in the future.':'Report overdue.'} Confirm site conditions before dispatch.</p>`:''}
       <div class="hoppers">${[latest.h1,latest.h2].map((weight,i)=>{
         const pct=weight/CAPACITY[facility][i]*100;
@@ -164,12 +166,13 @@ async function refresh(){
     readingRequestActive=true;$('refresh').disabled=true;
     $('checked').textContent='Fetching current CWS readings (read-only)…';
     const [cws,haul,projection]=await Promise.allSettled([readCurrentCWS(),readHaulSummary(),readFacilityForecast()]);
+    forecastReadFailed=projection.status==='rejected';
     facilityForecast=projection.status==='fulfilled'&&cws.status==='fulfilled'?projection.value:null;
     if(cws.status==='fulfilled'){data=cws.value;dataError='';$('checked').textContent=`CWS readings fetched ${stamp(Date.now())}. Source report timestamps shown below.`;}
     else{dataError='Current CWS feed could not be read or validated. Any prior readings retain their original source times.';$('checked').textContent='CWS refresh failed — no sample data substituted.';}
     if(haul.status==='fulfilled'&&haul.value){haulSummary=haul.value;haulSummaryStatus='';}
     else{haulSummary=null;haulSummaryStatus='HaulTrack totals unavailable or invalid. No totals or sample records substituted; this does not mean zero loads.';}
-    document.querySelector('.dev').textContent=`LIVE MODE · CWS ${cws.status==='fulfilled'?'readings loaded':'refresh failed'} · HaulTrack ${haulSummary?'totals loaded':'unavailable'} · Read only`;
+    document.querySelector('.dev').textContent=`LIVE MODE · CWS ${cws.status==='fulfilled'?'readings loaded':'refresh failed'} · HaulTrack ${haulSummary?'totals loaded':'unavailable'} · Forecast ${forecastReadFailed?'service unavailable — both facilities':'loaded'} · Read only`;
     readingRequestActive=false;$('refresh').disabled=false;
   } else $('checked').textContent=`Preview checked ${stamp(Date.now())}. Source measurement times unchanged. No live requests.`;
   renderFacilities();renderDetails();

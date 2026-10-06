@@ -19,11 +19,15 @@ function scenario(x,threshold,target,sensitivity=false){
   const f=x?.full;
   if(!f||f.thresholdLb!==threshold||!['conditional','beyond-horizon','modeled-threshold-crossed'].includes(f.status))fail();
   if(f.status==='conditional'&&(!(number(f.hours)>0)||f.hours>24||!time(f.at)))fail();
-  if(f.status==='beyond-horizon'&&(f.hours!==null||f.at!==null))fail();
+  if(f.status==='beyond-horizon'){
+    if(f.at===null){
+      if(f.hours!==null||![undefined,'outside-supported-date-range'].includes(f.projectionQuality))fail();
+    }else if(!(number(f.hours)>24)||!time(f.at)||f.projectionQuality!=='long-horizon-provisional')fail();
+  }
   if(f.status==='modeled-threshold-crossed'&&(!sensitivity||x.inventoryLb!==null||f.hours!==0||!time(f.at)))fail();
   if(f.status!=='modeled-threshold-crossed'&&number(x.inventoryLb)>=target)fail();
   // Per-hopper redirect estimates are deliberately not exposed by this adapter.
-  return {inventoryLb:x.inventoryLb,full:{thresholdLb:threshold,status:f.status,hours:f.hours,at:f.at}};
+  return {inventoryLb:x.inventoryLb,full:{thresholdLb:threshold,status:f.status,hours:f.hours,at:f.at,longRange:f.status==='beyond-horizon'&&f.at!==null}};
 }
 
 export function parseFacilityForecast(body){
@@ -52,10 +56,10 @@ export function parseFacilityForecast(body){
       if(f.status==='conditional'&&(f.historyQuality!=='two-interval-comparison'||postAnchor.pending.ticketCount+rateWindowHauls.pending.ticketCount+postAnchor.estimated.ticketCount+rateWindowHauls.estimated.ticketCount>0))fail();
       if(overage&&Object.values(postAnchor).some(b=>b.ticketCount>0||b.loadCount>0||b.netLb>0))fail();
       for(const s of [expected,noCredit]){
-        if(s.full.status==='conditional'&&Math.abs((target-s.inventoryLb)/rate-s.full.hours)>1e-8)fail();
+        if(s.full.at!==null&&s.full.status!=='modeled-threshold-crossed'&&Math.abs((target-s.inventoryLb)/rate-s.full.hours)>1e-8)fail();
         if(s.full.status==='beyond-horizon'&&(target-s.inventoryLb)/rate<=24)fail();
       }
-      for(const s of [expected,noCredit])if(s.full.status==='conditional'&&Math.abs(Date.parse(s.full.at)-Date.parse(generatedAt)-s.full.hours*3600000)>2)fail();
+      for(const s of [expected,noCredit])if(s.full.at!==null&&s.full.status!=='modeled-threshold-crossed'&&Math.abs(Date.parse(s.full.at)-Date.parse(generatedAt)-s.full.hours*3600000)>2)fail();
     }
     const observedBothFull=measuredHoppersLb?measuredHoppersLb.h1>=limits[0]&&measuredHoppersLb.h2>=limits[1]:null;
     if(f.observedBothFull!==observedBothFull)fail();
@@ -79,7 +83,8 @@ export function selectFacilityForecast(parsed,facility,report,now=Date.now()){
 }
 
 export async function readFacilityForecast(fetchImpl=fetch){
-  const response=await fetchImpl(FORECAST_URL,{method:'GET',credentials:'omit',cache:'no-store',redirect:'error',signal:AbortSignal.timeout(20000)});
+  // Allow the server's bounded 30-second fresh-snapshot retry plus transport time.
+  const response=await fetchImpl(FORECAST_URL,{method:'GET',credentials:'omit',cache:'no-store',redirect:'error',signal:AbortSignal.timeout(35000)});
   if(!response.ok)throw Error('Forecast unavailable');
   return parseFacilityForecast(await response.json());
 }
