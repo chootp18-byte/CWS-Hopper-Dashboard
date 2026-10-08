@@ -51,7 +51,7 @@ function renderFacilities(){
     const minutes=projection.hours===undefined?null:Math.max(0,Math.round(projection.hours*12)*5);
     const countdown=minutes===null?'':minutes>=60?`${Math.floor(minutes/60)}h ${minutes%60}m remaining`:`${minutes} minutes remaining`;
     let timing=`<div class="shutdown-projection ${projection.reached||projection.atCapacity?'urgent':minutes!==null&&minutes<=120?'soon':''}"><small>PROJECTED SHUTDOWN · BOTH HOPPERS FULL</small><div class="eta">${projection.reason?'Timing unavailable':projection.reached?'May already be full':`${new Date(projection.bothAt).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}`}</div><p class="eta-date">${projection.reason?escape(projection.reason):`${new Date(projection.bothAt).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})} · ${countdown}`}</p><p><strong>${projection.rate?fmt(projection.rate)+' lb/hour estimated production':'Production estimate unavailable'}</strong></p><p class="muted">${projection.remaining!==undefined?fmt(projection.remaining)+' lb combined space estimated now. ':''}Flow can redirect to the hopper with room. Assumes current production continues and <strong>no additional future haul-outs</strong>.</p><p class="confidence">${projection.reason?'Insufficient current evidence':'Conditional estimate — not a guaranteed shutdown time'}. Full-capacity limits confirmed by the user. Synthetic load coverage only; HaulTrack is not connected.</p></div>`;
-    if(liveMode)timing=forecastHTML(facilityForecast,facility,latest,Date.now(),{allowPreliminary:!dataError&&!forecastReadFailed});
+    if(liveMode)timing=forecastHTML(facilityForecast,facility,latest,Date.now(),{allowPreliminary:!dataError});
     const explanation=estimate.reason ? 'The measured report above is unchanged.' : estimate.mode==='off'
       ? `Holding the reported inventory less ${fmt(estimate.removed)} lb hauled since the report. Assumes feeding has remained off.`
       : `Estimated production: ${fmt(estimate.rate)} lb/hour. Added back ${fmt(estimate.addedBack)} lb hauled between readings; subtracted ${fmt(estimate.removed)} lb hauled since the latest report.`;
@@ -82,7 +82,7 @@ function compactFacilities(){
   const summary=document.createElement('summary');summary.textContent='Details & assumptions';details.append(summary);
   card.querySelectorAll('.shutdown-projection').forEach(box=>{
    [...box.children].forEach(el=>{
-    if(el.matches('p.flow-rate,small,.eta,.eta-date,.warning'))return;
+    if(el.matches('p.flow-rate,small,.eta,.eta-date,.warning,.scenario-basis'))return;
     details.append(el);
    });
   });

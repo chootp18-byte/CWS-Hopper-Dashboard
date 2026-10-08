@@ -22,3 +22,5 @@ header,main,footer{padding:12px 20px}.brand img{width:40px}.brand{gap:10px}h1{fo
 
 /* Reported feed state stays visible independently of flow-rate availability. */
 .feed-status{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;margin:8px 0;border:1px solid #888;border-radius:6px;background:#303030;color:#fff}.feed-status strong{font-size:16px;letter-spacing:.04em;white-space:nowrap}.feed-status span{font-size:11px;text-align:right;max-width:145px;color:#eee}.feed-running{background:#e3e3e3;color:#111}.feed-running span{color:#222}.feed-off{border:2px solid #aaa}.feed-unknown{border-style:dashed}
+
+.scenario-basis{font-size:12px;line-height:1.4;margin:7px 0;color:#eee}
